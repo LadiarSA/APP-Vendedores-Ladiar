@@ -365,6 +365,14 @@ const FREQ_ERP_CODE = { 'semanal':'1', 'quincenal':'2', 'mensual':'4' };
 const FREQ_LABELS_ERP = { 'semanal':'Semanal', 'quincenal':'Quincenal', 'mensual':'Mensual' };
 const FREQ_CODE_TO_NAME = { '1':'semanal', '2':'quincenal', '4':'mensual' };
 const VENDOR_CODE_TO_NAME = Object.fromEntries(Object.entries(VENDOR_CODES).map(([n,c])=>[c,n]));
+// Rol de cada vendedor (Impulso o Planificado), usado como respaldo del importador cuando
+// no hay datos previos de esa zona para copiar el rol.
+const VENDOR_ROL = {
+  'VILCA':'Planificado','GONZALEZ':'Planificado','MENNA':'Impulso','ANDINO':'Impulso',
+  'JIMENEZ':'Impulso','DIAZ':'Impulso','LABONIA':'Impulso','IBALO':'Planificado',
+  'NUÑEZ':'Planificado','OJEDA':'Impulso','BARREÑA':'Impulso','CARABAJAL':'Planificado',
+  'ALVAREZ':'Planificado','HECKLEIN':'Planificado'
+};
 
 // Equivalencia Categoría del maestro de clientes (ERP) -> Tier interno del sistema de ruteo.
 // "Elite" no existe en el ERP: es una categoría manual para pocos clientes, no se toca en la importación.
@@ -2901,7 +2909,7 @@ async function adminProcessImport(){
         targetSemanas = [ existingRows[0] ? existingRows[0].s : 'Semana 1' ];
       }
 
-      const vendorRol = existingSample ? existingSample.rol : ((adminGetVendorsForZona(zona).find(v=>v.vend===vendName)||{}).rol || 'Impulso');
+      const vendorRol = existingSample ? existingSample.rol : ((adminGetVendorsForZona(zona).find(v=>v.vend===vendName)||{}).rol || VENDOR_ROL[vendName] || 'Impulso');
       let huboVisita = false;
 
       Object.entries(dayColIdx).forEach(([dia, colI])=>{
