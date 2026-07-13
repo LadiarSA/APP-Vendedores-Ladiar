@@ -1270,6 +1270,19 @@ function setObjView(v){
   renderVendorObjetivos();
 }
 
+// Algunos navegadores mobile (iOS/Android con -webkit-overflow-scrolling:touch) no
+// recalculan el alto scrolleable de un contenedor cuando su contenido cambia con
+// innerHTML — queda "pegado" al tamaño anterior y no se puede bajar. Forzamos un
+// reflow apagando y prendiendo el overflow para que el navegador lo recalcule.
+function mvForceScrollReflow(el){
+  if(!el) return;
+  el.scrollTop = 0;
+  var prev = el.style.overflowY;
+  el.style.overflowY = 'hidden';
+  void el.offsetHeight; // fuerza el reflow
+  el.style.overflowY = prev || 'scroll';
+}
+
 function fmtVM(n){
   return '$'+Math.round(n).toLocaleString('es-AR');
 }
@@ -1325,9 +1338,12 @@ function renderVendorObjetivos(){
   var tOP=0,tVP=0,tPP=0,tDP=0,tVdP=0,tVuP=0;
   var tOK=0,tVK=0,tPK=0,tDK=0,tVdK=0;
   data.forEach(function(r){
-    tOP+=r.obj_p;tVP+=r.vta_p;tPP+=r.proy_p;tDP+=r.dif_p;tVdP+=r.vdia_p;tVuP+=r.vud_p;
-    tOK+=r.obj_kg;tVK+=r.vta_kg;tPK+=r.proy_kg;tDK+=r.dif_kg;tVdK+=r.vdia_kg;
+    tOP+=r.obj_p;tVP+=r.vta_p;tPP+=r.proy_p;tDP+=r.dif_p;tVdP+=(r.vdia_p||0);tVuP+=(r.vud_p||0);
+    tOK+=r.obj_kg;tVK+=r.vta_kg;tPK+=r.proy_kg;tDK+=r.dif_kg;tVdK+=(r.vdia_kg||0);
   });
+  var hayVdP = data.some(function(r){ return r.vdia_p!=null && !isNaN(r.vdia_p) && r.vdia_p!==0; });
+  var hayVuP = data.some(function(r){ return r.vud_p!=null && !isNaN(r.vud_p) && r.vud_p!==0; });
+  var hayVdK = data.some(function(r){ return r.vdia_kg!=null && !isNaN(r.vdia_kg) && r.vdia_kg!==0; });
   var pctP  =tOP?tVP/tOP*100:0; var prPctP=tOP?tPP/tOP*100:0;
   var pctK  =tOK?tVK/tOK*100:0; var prPctK=tOK?tPK/tOK*100:0;
   var cc    =myCart==='IMPULSO'?'#7b1fa2':'#1565c0';
@@ -1337,8 +1353,8 @@ function renderVendorObjetivos(){
   var kpis=[];
   kpis.push({l:'Dias vendidos', v:diasV+'', s:diasR+' restantes', c:'#5f6368'});
   if(view==='pesos'||view==='ambos'){
-    kpis.push({l:'Venta Ayer $',  v:fmtVM(tVuP),           s:'ultimo dia',                    c:'#5f6368'});
-    kpis.push({l:'Req. hoy $',    v:fmtVM(tVdP),           s:'para cumplir obj.',             c:'#f57f17'});
+    kpis.push({l:'Venta Ayer $',  v:hayVuP?fmtVM(tVuP):'s/d',           s:'ultimo dia',                    c:'#5f6368'});
+    kpis.push({l:'Req. hoy $',    v:hayVdP?fmtVM(tVdP):'s/d',           s:'para cumplir obj.',             c:'#f57f17'});
     kpis.push({l:'Objetivo $',    v:fmtVM(tOP),             s:'',                             c:cc});
     kpis.push({l:'Acumulado $',   v:fmtVM(tVP),             s:pctP.toFixed(1)+'% del obj.',   c:vcol(pctP)});
     kpis.push({l:'Proyectado $',  v:fmtVM(tPP),             s:prPctP.toFixed(1)+'% proy.',    c:vcol(prPctP)});
@@ -1349,7 +1365,7 @@ function renderVendorObjetivos(){
     kpis.push({l:'Acumulado KG',v:fmtVKg(tVK),       s:pctK.toFixed(1)+'% del obj.',     c:vcol(pctK)});
     kpis.push({l:'Proyectado KG',v:fmtVKg(tPK),      s:prPctK.toFixed(1)+'% proy.',      c:vcol(prPctK)});
     kpis.push({l:'Faltante s/Proy. KG', v:fmtVKg(Math.abs(tDK)), s:(tDK>=0?'Superavit':'Faltante'),c:tDK>=0?'#2e7d32':'#c62828'});
-    kpis.push({l:'Req. hoy KG', v:fmtVKg(tVdK),      s:'para cumplir obj.',              c:'#f57f17'});
+    kpis.push({l:'Req. hoy KG', v:hayVdK?fmtVKg(tVdK):'s/d',      s:'para cumplir obj.',              c:'#f57f17'});
   }
 
   document.getElementById('obj-kpi-vendor').innerHTML=kpis.map(function(k){
@@ -1372,14 +1388,14 @@ function renderVendorObjetivos(){
   if(view==='pesos'||view==='ambos'){
     var dOkT=tDP>=0;
     summaryHtml+='<span style="font-size:11px;background:'+(dOkT?'#e8f5e9':'#ffebee')+';color:'+(dOkT?'#2e7d32':'#c62828')+';border-radius:5px;padding:3px 8px;font-weight:700">'+(dOkT?'OK +':'Faltante s/Proy. ')+fmtVM(Math.abs(tDP))+'</span>';
-    summaryHtml+='<span style="font-size:11px;color:#f57f17;background:#fff8e1;border-radius:5px;padding:3px 8px">Req. '+fmtVM(tVdP)+'/dia</span>';
+    summaryHtml+='<span style="font-size:11px;color:#f57f17;background:#fff8e1;border-radius:5px;padding:3px 8px">Req. '+(hayVdP?fmtVM(tVdP):'s/d')+'/dia</span>';
     summaryHtml+='<span style="font-size:11px;color:#5f6368;background:#f1f3f4;border-radius:5px;padding:3px 8px">Proy. '+prPctP.toFixed(0)+'% ('+fmtVM(tPP)+')</span>';
     if(tVuP) summaryHtml+='<span style="font-size:11px;color:#1565c0;background:#e3f2fd;border-radius:5px;padding:3px 8px">Ayer '+fmtVM(tVuP)+'</span>';
   }
   if(view==='kg'||view==='ambos'){
     var dOkTK=tDK>=0;
     summaryHtml+='<span style="font-size:11px;background:'+(dOkTK?'#e8f5e9':'#ffebee')+';color:'+(dOkTK?'#2e7d32':'#c62828')+';border-radius:5px;padding:3px 8px;font-weight:700">'+(dOkTK?'OK +':'Faltante s/Proy. ')+fmtVKg(Math.abs(tDK))+'</span>';
-    summaryHtml+='<span style="font-size:11px;color:#f57f17;background:#fff8e1;border-radius:5px;padding:3px 8px">Req. '+fmtVKg(tVdK)+'/dia</span>';
+    summaryHtml+='<span style="font-size:11px;color:#f57f17;background:#fff8e1;border-radius:5px;padding:3px 8px">Req. '+(hayVdK?fmtVKg(tVdK):'s/d')+'/dia</span>';
     summaryHtml+='<span style="font-size:11px;color:#5f6368;background:#f1f3f4;border-radius:5px;padding:3px 8px">Proy. '+prPctK.toFixed(0)+'% ('+fmtVKg(tPK)+')</span>';
   }
   summaryHtml+='</div>';
@@ -1397,7 +1413,7 @@ function renderVendorObjetivos(){
       rubHtml+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">';
       rubHtml+='<span style="font-size:11px;background:'+(dOk?'#e8f5e9':'#ffebee')+';color:'+(dOk?'#2e7d32':'#c62828')+';border-radius:5px;padding:3px 8px;font-weight:700">'+(dOk?'OK +':'Faltante s/Proy. ')+fmtVM(Math.abs(r.dif_p))+'</span>';
       rubHtml+='<span style="font-size:11px;color:#5f6368;background:#f1f3f4;border-radius:5px;padding:3px 8px">Proy. '+r.proy_pct_p.toFixed(0)+'% ('+fmtVM(r.proy_p)+')</span>';
-      rubHtml+='<span style="font-size:11px;color:#f57f17;background:#fff8e1;border-radius:5px;padding:3px 8px">'+fmtVM(r.vdia_p)+'/dia</span>';
+      if(r.vdia_p!=null && !isNaN(r.vdia_p)) rubHtml+='<span style="font-size:11px;color:#f57f17;background:#fff8e1;border-radius:5px;padding:3px 8px">'+fmtVM(r.vdia_p)+'/dia</span>';
       if(r.vud_p) rubHtml+='<span style="font-size:11px;color:#1565c0;background:#e3f2fd;border-radius:5px;padding:3px 8px">Ayer '+fmtVM(r.vud_p)+'</span>';
       rubHtml+='</div>';
     }
@@ -1407,13 +1423,15 @@ function renderVendorObjetivos(){
       rubHtml+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">';
       rubHtml+='<span style="font-size:11px;background:'+(dOkK?'#e8f5e9':'#ffebee')+';color:'+(dOkK?'#2e7d32':'#c62828')+';border-radius:5px;padding:3px 8px;font-weight:700">'+(dOkK?'OK +':'Faltante s/Proy. ')+fmtVKg(Math.abs(r.dif_kg))+'</span>';
       rubHtml+='<span style="font-size:11px;color:#5f6368;background:#f1f3f4;border-radius:5px;padding:3px 8px">Proy. '+r.proy_pct_kg.toFixed(0)+'% ('+fmtVKg(r.proy_kg)+')</span>';
-      rubHtml+='<span style="font-size:11px;color:#f57f17;background:#fff8e1;border-radius:5px;padding:3px 8px">'+fmtVKg(r.vdia_kg)+'/dia</span>';
+      if(r.vdia_kg!=null && !isNaN(r.vdia_kg)) rubHtml+='<span style="font-size:11px;color:#f57f17;background:#fff8e1;border-radius:5px;padding:3px 8px">'+fmtVKg(r.vdia_kg)+'/dia</span>';
       rubHtml+='</div></div>';
     }
     rubHtml+='</div>';
   });
 
-  document.getElementById('obj-rubros-vendor').innerHTML=rubHtml;
+  var contEl_=document.getElementById('obj-rubros-vendor');
+  contEl_.innerHTML=rubHtml;
+  mvForceScrollReflow(contEl_);
 }
 
 var OBJ_HELADOS = [];
@@ -1502,7 +1520,9 @@ function renderHelados(){
   rubHtml+='<span style="font-size:11px;background:#f1f3f4;color:#5f6368;border-radius:5px;padding:3px 9px">'+h.freezer+' freezers</span>';
   rubHtml+='</div></div></div>';
 
-  document.getElementById('obj-rubros-vendor').innerHTML=rubHtml;
+  var contEl_=document.getElementById('obj-rubros-vendor');
+  contEl_.innerHTML=rubHtml;
+  mvForceScrollReflow(contEl_);
 }
 
 function loadVendorObjCSV(input){
@@ -1942,16 +1962,22 @@ function mvRenderGroupClientes(field, groupKey, rubroKey, rows){
     var objetivo = (growthPct!==null && ventaPA!==null) ? ventaPA*(1+growthPct) : null;
     var faltante = (objetivo!==null) ? Math.max(0, objetivo-ventaActual) : null;
     var avance = (objetivo && objetivo>0) ? (ventaActual/objetivo*100) : null;
-    return '<div style="padding:8px 13px;border-left:3px solid #1e88e5;background:#fafbfc">'
+
+    var barraHtml = (avance!==null)
+      ? vpBar(avance, '🎯 '+fmtV(ventaActual)+' de '+fmtV(objetivo)+' objetivo', avance)
+      : '<div style="font-size:10.5px;color:#80868b;margin:4px 0">🎯 Actual: <b style="color:#1e88e5">'+fmtV(ventaActual)+'</b> · objetivo: s/d</div>';
+
+    var estadoChip = (faltante===null) ? ''
+      : faltante>0
+        ? '<span style="font-size:10.5px;font-weight:700;color:#c62828;background:#ffebee;border-radius:5px;padding:2px 8px">⚠️ Faltan '+fmtV(faltante)+'</span>'
+        : '<span style="font-size:10.5px;font-weight:700;color:#2e7d32;background:#e8f5e9;border-radius:5px;padding:2px 8px">✅ Objetivo cumplido</span>';
+
+    return '<div style="padding:9px 13px;border-left:3px solid #1e88e5;background:#fafbfc">'
       +'<div style="font-size:11.5px;font-weight:700;color:#202124;margin-bottom:4px">'+cl+'</div>'
-      +'<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:10.5px;color:#5f6368;margin-bottom:2px">'
-      +'<span>Actual: <b style="color:#1e88e5">'+fmtV(ventaActual)+'</b></span>'
-      +'<span>Año pasado: '+(ventaPA===null?'s/d':fmtV(ventaPA))+'</span>'
-      +'<span>Objetivo: '+(objetivo===null?'s/d':fmtV(objetivo))+'</span>'
-      +'</div>'
-      +'<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:10.5px">'
-      +'<span style="color:#5f6368">Faltante: <b style="color:'+(faltante>0?'#c62828':'#2e7d32')+'">'+(faltante===null?'s/d':fmtV(faltante))+'</b></span>'
-      +(avance!==null?'<span style="font-weight:700;color:'+mvAvanceColor(avance)+'">'+avance.toFixed(0)+'% del objetivo</span>':'')
+      + barraHtml
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px">'
+      +'<span style="font-size:10.5px;color:#5f6368">📅 Año pasado: '+(ventaPA===null?'s/d':fmtV(ventaPA))+'</span>'
+      + estadoChip
       +'</div>'
       +'</div>';
   }).join('');
