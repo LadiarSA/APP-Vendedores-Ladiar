@@ -288,8 +288,13 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
     </div>
 
   </div>
+  <!-- Filters toggle -->
+  <div onclick="mvToggleFilters()" style="background:#fff;border-bottom:1px solid #e8eaed;padding:6px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;flex-shrink:0">
+    <span style="font-size:11px;font-weight:700;color:#5f6368">🔍 Filtros</span>
+    <span id="mv-filters-arrow" style="font-size:11px;color:#5f6368;font-weight:700">▾ Ocultar</span>
+  </div>
   <!-- Filters -->
-  <div style="background:#fff;border-bottom:1px solid #e8eaed;padding:8px 14px;display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;align-items:center">
+  <div id="mv-filters-panel" style="background:#fff;border-bottom:1px solid #e8eaed;padding:8px 14px;display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;align-items:center">
     <select id="mv-rubro" onchange="mvApplyFilters()" style="font-size:11px;padding:5px 8px;border:1.5px solid #e8eaed;border-radius:8px;flex:1;min-width:140px">
       <option value="">Todos los rubros</option>
     </select>
@@ -1329,13 +1334,13 @@ function renderVendorObjetivos(){
     kpis.push({l:'Objetivo $',    v:fmtVM(tOP),             s:'',                             c:cc});
     kpis.push({l:'Acumulado $',   v:fmtVM(tVP),             s:pctP.toFixed(1)+'% del obj.',   c:vcol(pctP)});
     kpis.push({l:'Proyectado $',  v:fmtVM(tPP),             s:prPctP.toFixed(1)+'% proy.',    c:vcol(prPctP)});
-    kpis.push({l:'Faltante $',    v:fmtVM(Math.abs(tDP)),   s:(tDP>=0?'Superavit':'Faltante'),c:tDP>=0?'#2e7d32':'#c62828'});
+    kpis.push({l:'Faltante s/Proy. $', v:fmtVM(Math.abs(tDP)),   s:(tDP>=0?'Superavit':'Faltante'),c:tDP>=0?'#2e7d32':'#c62828'});
   }
   if(view==='kg'||view==='ambos'){
     kpis.push({l:'Objetivo KG', v:fmtVKg(tOK),       s:'',                               c:cc});
     kpis.push({l:'Acumulado KG',v:fmtVKg(tVK),       s:pctK.toFixed(1)+'% del obj.',     c:vcol(pctK)});
     kpis.push({l:'Proyectado KG',v:fmtVKg(tPK),      s:prPctK.toFixed(1)+'% proy.',      c:vcol(prPctK)});
-    kpis.push({l:'Faltante KG', v:fmtVKg(Math.abs(tDK)), s:(tDK>=0?'Superavit':'Faltante'),c:tDK>=0?'#2e7d32':'#c62828'});
+    kpis.push({l:'Faltante s/Proy. KG', v:fmtVKg(Math.abs(tDK)), s:(tDK>=0?'Superavit':'Faltante'),c:tDK>=0?'#2e7d32':'#c62828'});
     kpis.push({l:'Req. hoy KG', v:fmtVKg(tVdK),      s:'para cumplir obj.',              c:'#f57f17'});
   }
 
@@ -1358,16 +1363,16 @@ function renderVendorObjetivos(){
   summaryHtml+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">';
   if(view==='pesos'||view==='ambos'){
     var dOkT=tDP>=0;
-    summaryHtml+='<span style="font-size:11px;background:'+(dOkT?'#e8f5e9':'#ffebee')+';color:'+(dOkT?'#2e7d32':'#c62828')+';border-radius:5px;padding:3px 8px;font-weight:700">'+(dOkT?'OK +':'Faltante ')+fmtVM(Math.abs(tDP))+'</span>';
+    summaryHtml+='<span style="font-size:11px;background:'+(dOkT?'#e8f5e9':'#ffebee')+';color:'+(dOkT?'#2e7d32':'#c62828')+';border-radius:5px;padding:3px 8px;font-weight:700">'+(dOkT?'OK +':'Faltante s/Proy. ')+fmtVM(Math.abs(tDP))+'</span>';
     summaryHtml+='<span style="font-size:11px;color:#f57f17;background:#fff8e1;border-radius:5px;padding:3px 8px">Req. '+fmtVM(tVdP)+'/dia</span>';
-    summaryHtml+='<span style="font-size:11px;color:#5f6368;background:#f1f3f4;border-radius:5px;padding:3px 8px">Proy. '+prPctP.toFixed(0)+'%</span>';
+    summaryHtml+='<span style="font-size:11px;color:#5f6368;background:#f1f3f4;border-radius:5px;padding:3px 8px">Proy. '+prPctP.toFixed(0)+'% ('+fmtVM(tPP)+')</span>';
     if(tVuP) summaryHtml+='<span style="font-size:11px;color:#1565c0;background:#e3f2fd;border-radius:5px;padding:3px 8px">Ayer '+fmtVM(tVuP)+'</span>';
   }
   if(view==='kg'||view==='ambos'){
     var dOkTK=tDK>=0;
-    summaryHtml+='<span style="font-size:11px;background:'+(dOkTK?'#e8f5e9':'#ffebee')+';color:'+(dOkTK?'#2e7d32':'#c62828')+';border-radius:5px;padding:3px 8px;font-weight:700">'+(dOkTK?'OK +':'Faltante ')+fmtVKg(Math.abs(tDK))+'</span>';
+    summaryHtml+='<span style="font-size:11px;background:'+(dOkTK?'#e8f5e9':'#ffebee')+';color:'+(dOkTK?'#2e7d32':'#c62828')+';border-radius:5px;padding:3px 8px;font-weight:700">'+(dOkTK?'OK +':'Faltante s/Proy. ')+fmtVKg(Math.abs(tDK))+'</span>';
     summaryHtml+='<span style="font-size:11px;color:#f57f17;background:#fff8e1;border-radius:5px;padding:3px 8px">Req. '+fmtVKg(tVdK)+'/dia</span>';
-    summaryHtml+='<span style="font-size:11px;color:#5f6368;background:#f1f3f4;border-radius:5px;padding:3px 8px">Proy. '+prPctK.toFixed(0)+'%</span>';
+    summaryHtml+='<span style="font-size:11px;color:#5f6368;background:#f1f3f4;border-radius:5px;padding:3px 8px">Proy. '+prPctK.toFixed(0)+'% ('+fmtVKg(tPK)+')</span>';
   }
   summaryHtml+='</div>';
   summaryHtml+='</div>';
@@ -1382,8 +1387,8 @@ function renderVendorObjetivos(){
     if(view==='pesos'||view==='ambos'){
       rubHtml+=vpBar(r.pct_p,'$ Acum.  '+fmtVM(r.vta_p)+' de '+fmtVM(r.obj_p),r.proy_pct_p);
       rubHtml+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">';
-      rubHtml+='<span style="font-size:11px;background:'+(dOk?'#e8f5e9':'#ffebee')+';color:'+(dOk?'#2e7d32':'#c62828')+';border-radius:5px;padding:3px 8px;font-weight:700">'+(dOk?'OK +':'Faltante ')+fmtVM(Math.abs(r.dif_p))+'</span>';
-      rubHtml+='<span style="font-size:11px;color:#5f6368;background:#f1f3f4;border-radius:5px;padding:3px 8px">Proy. '+r.proy_pct_p.toFixed(0)+'%</span>';
+      rubHtml+='<span style="font-size:11px;background:'+(dOk?'#e8f5e9':'#ffebee')+';color:'+(dOk?'#2e7d32':'#c62828')+';border-radius:5px;padding:3px 8px;font-weight:700">'+(dOk?'OK +':'Faltante s/Proy. ')+fmtVM(Math.abs(r.dif_p))+'</span>';
+      rubHtml+='<span style="font-size:11px;color:#5f6368;background:#f1f3f4;border-radius:5px;padding:3px 8px">Proy. '+r.proy_pct_p.toFixed(0)+'% ('+fmtVM(r.proy_p)+')</span>';
       rubHtml+='<span style="font-size:11px;color:#f57f17;background:#fff8e1;border-radius:5px;padding:3px 8px">'+fmtVM(r.vdia_p)+'/dia</span>';
       if(r.vud_p) rubHtml+='<span style="font-size:11px;color:#1565c0;background:#e3f2fd;border-radius:5px;padding:3px 8px">Ayer '+fmtVM(r.vud_p)+'</span>';
       rubHtml+='</div>';
@@ -1392,8 +1397,8 @@ function renderVendorObjetivos(){
       rubHtml+='<div style="margin-top:'+(view==='ambos'?'9px':'0')+'">';
       rubHtml+=vpBar(r.pct_kg,'KG Acum.  '+fmtVKg(r.vta_kg)+' de '+fmtVKg(r.obj_kg),r.proy_pct_kg);
       rubHtml+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">';
-      rubHtml+='<span style="font-size:11px;background:'+(dOkK?'#e8f5e9':'#ffebee')+';color:'+(dOkK?'#2e7d32':'#c62828')+';border-radius:5px;padding:3px 8px;font-weight:700">'+(dOkK?'OK +':'Faltante ')+fmtVKg(Math.abs(r.dif_kg))+'</span>';
-      rubHtml+='<span style="font-size:11px;color:#5f6368;background:#f1f3f4;border-radius:5px;padding:3px 8px">Proy. '+r.proy_pct_kg.toFixed(0)+'%</span>';
+      rubHtml+='<span style="font-size:11px;background:'+(dOkK?'#e8f5e9':'#ffebee')+';color:'+(dOkK?'#2e7d32':'#c62828')+';border-radius:5px;padding:3px 8px;font-weight:700">'+(dOkK?'OK +':'Faltante s/Proy. ')+fmtVKg(Math.abs(r.dif_kg))+'</span>';
+      rubHtml+='<span style="font-size:11px;color:#5f6368;background:#f1f3f4;border-radius:5px;padding:3px 8px">Proy. '+r.proy_pct_kg.toFixed(0)+'% ('+fmtVKg(r.proy_kg)+')</span>';
       rubHtml+='<span style="font-size:11px;color:#f57f17;background:#fff8e1;border-radius:5px;padding:3px 8px">'+fmtVKg(r.vdia_kg)+'/dia</span>';
       rubHtml+='</div></div>';
     }
@@ -1622,6 +1627,13 @@ function getVendorCode(){
   return (VENDOR_PINS[currentVendor]||{}).code||'';
 }
 
+var mvFiltersCollapsed = false;
+function mvToggleFilters(){
+  mvFiltersCollapsed = !mvFiltersCollapsed;
+  document.getElementById('mv-filters-panel').style.display = mvFiltersCollapsed ? 'none' : 'flex';
+  document.getElementById('mv-filters-arrow').textContent = mvFiltersCollapsed ? '▸ Mostrar' : '▾ Ocultar';
+}
+
 function initMiVenta(){
   if(!mvInited){
     var code=getVendorCode();
@@ -1841,24 +1853,38 @@ function mvClientPA(clients, rubro, seg, canal){
 function mvAvanceColor(pct){ return pct>=100?'#2e7d32':pct>=70?'#f57f17':'#c62828'; }
 
 // Rubros expandidos actualmente (se mantiene entre renders para que no se cierren solos)
-var mvExpandedRubros = new Set();
+var mvExpandedGroups = { ru: new Set(), sg: new Set() };
 
-function mvToggleRubro(key){
-  var wasOpen = mvExpandedRubros.has(key);
-  mvExpandedRubros.clear();
-  if(!wasOpen) mvExpandedRubros.add(key);
+function mvToggleGroup(field, key){
+  var set = mvExpandedGroups[field];
+  var wasOpen = set.has(key);
+  set.clear();
+  if(!wasOpen) set.add(key);
   mvRenderMain();
 }
 
-// Tarjeta de rubro expandible/contraíble. Al expandir, muestra la lista de clientes de
-// ese rubro (con los filtros activos) y, para cada uno: venta actual, venta año pasado,
-// objetivo individual (venta año pasado del cliente × % de crecimiento del objetivo de
-// la división) y cuánto le falta para llegar a ese objetivo.
-function mvRubroAccordionCard(g){
+// Determina el rubro "dueño" de un conjunto de filas (el más frecuente entre ellas).
+// Se usa en la vista Por Segmento, porque los objetivos oficiales (OBJ_DATA_VENDOR) solo
+// existen a nivel rubro, nunca a nivel segmento — así que el % de crecimiento que se le
+// aplica a un segmento es siempre el de su rubro contenedor.
+function mvDominantRubro(rows){
+  var counts = {};
+  rows.forEach(function(r){ var ru=vf(r,'ru'); counts[ru]=(counts[ru]||0)+1; });
+  var best=null, bestCount=-1;
+  Object.keys(counts).forEach(function(k){ if(counts[k]>bestCount){ best=k; bestCount=counts[k]; } });
+  return best;
+}
+
+// Tarjeta expandible/contraíble (rubro o segmento). Al expandir, muestra la lista de
+// clientes del grupo con: venta actual, venta año pasado, objetivo individual (venta año
+// pasado del cliente × % de crecimiento del objetivo de la división) y faltante.
+// field: 'ru' (Por Rubro) o 'sg' (Por Segmento).
+function mvAccordionCard(g, field){
   var mc=mvCol(g.avgMg);
-  var expanded = mvExpandedRubros.has(g.key);
+  var set = mvExpandedGroups[field];
+  var expanded = set.has(g.key);
   var safeKey = g.key.replace(/'/g,"\\'");
-  var html = '<div onclick="mvToggleRubro(\''+safeKey+'\')" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:10px 13px;cursor:pointer">'
+  var html = '<div onclick="mvToggleGroup(\''+field+'\',\''+safeKey+'\')" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:10px 13px;cursor:pointer">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">'
     +'<div style="font-size:12px;font-weight:700;color:#202124">'+(expanded?'[-]':'[+]')+' '+g.key+'</div>'
     +'</div>'
@@ -1872,13 +1898,17 @@ function mvRubroAccordionCard(g){
     +(g.avgBn>0?'<span style="font-size:10px;color:#c62828;background:#ffebee;border-radius:5px;padding:2px 7px">-'+g.avgBn.toFixed(1)+'% desc.</span>':'')
     +'</div>'
     +'</div>';
-  if(expanded) html += mvRenderRubroClientes(g.key, g.rows);
+  if(expanded){
+    var rubroKey = field==='ru' ? g.key : mvDominantRubro(g.rows);
+    html += mvRenderGroupClientes(field, g.key, rubroKey, g.rows);
+  }
   return html;
 }
 
-function mvRenderRubroClientes(rubroKey, rows){
+function mvRenderGroupClientes(field, groupKey, rubroKey, rows){
   // % de crecimiento del objetivo de la división: objetivo oficial total (todos los
   // vendedores) vs. venta total de la división el año pasado (todos los clientes/vendedores).
+  // Siempre se calcula a nivel RUBRO, incluso cuando estamos parados en un segmento.
   var objTotal = OBJ_DATA_VENDOR.filter(function(o){ return objRubroBase(o.rubro)===rubroKey; })
     .reduce(function(s,o){ return s+o.obj_p; }, 0);
   var globalRubroPA = VENTA_PA_RAW.r.filter(function(r){ return vf(r,'ru',VENTA_PA_KEYS)===rubroKey; })
@@ -1893,9 +1923,14 @@ function mvRenderRubroClientes(rubroKey, rows){
   });
   var clientKeys = Object.keys(byClient).sort(function(a,b){ return byClient[b]-byClient[a]; });
 
+  // Venta año pasado del cliente: en Por Rubro, se busca por rubro; en Por Segmento, se
+  // busca por ese mismo segmento (para comparar manzanas con manzanas), pero el % de
+  // crecimiento que se le aplica sigue siendo el del rubro contenedor.
   var rowsHtml = clientKeys.map(function(cl){
     var ventaActual = byClient[cl];
-    var ventaPA = mvClientPA(new Set([cl]), rubroKey, null, null);
+    var ventaPA = (field==='ru')
+      ? mvClientPA(new Set([cl]), rubroKey, null, null)
+      : mvClientPA(new Set([cl]), null, groupKey, null);
     var objetivo = (growthPct!==null && ventaPA!==null) ? ventaPA*(1+growthPct) : null;
     var faltante = (objetivo!==null) ? Math.max(0, objetivo-ventaActual) : null;
     var avance = (objetivo && objetivo>0) ? (ventaActual/objetivo*100) : null;
@@ -1914,8 +1949,9 @@ function mvRenderRubroClientes(rubroKey, rows){
   }).join('');
 
   var growthLabel = growthPct===null ? 'sin datos de objetivo' : (growthPct*100>=0?'+':'')+(growthPct*100).toFixed(1)+'%';
+  var growthNote = field==='sg' ? (' (rubro: '+(rubroKey||'s/d')+')') : '';
   return '<div style="padding:6px 13px;border-left:3px solid #1e88e5;font-size:9.5px;color:#80868b;background:#e3f2fd">'
-    +'Crecimiento objetivo división: <b>'+growthLabel+'</b> · objetivo individual = venta año pasado del cliente × (1 + crecimiento)</div>'
+    +'Crecimiento objetivo división'+growthNote+': <b>'+growthLabel+'</b> · objetivo individual = venta año pasado del cliente × (1 + crecimiento)</div>'
     + rowsHtml;
 }
 
@@ -1927,12 +1963,12 @@ function mvRenderMain(){
   if(mvView==='rubro'){
     var groups=mvGroupBy('ru');
     groups.sort(function(a,b){return b.vp-a.vp;});
-    html=groups.map(function(g){return mvRubroAccordionCard(g);}).join('');
+    html=groups.map(function(g){return mvAccordionCard(g,'ru');}).join('');
   }
   else if(mvView==='segmento'){
     var groups=mvGroupBy('sg');
     groups.sort(function(a,b){return b.vp-a.vp;});
-    html=groups.map(function(g){return mvGroupCard(g,'segmento');}).join('');
+    html=groups.map(function(g){return mvAccordionCard(g,'sg');}).join('');
   }
   else if(mvView==='cliente'){
     var groups=mvGroupBy('cl');
