@@ -1857,10 +1857,9 @@ function mvRubroAccordionCard(g){
   var mc=mvCol(g.avgMg);
   var expanded = mvExpandedRubros.has(g.key);
   var safeKey = g.key.replace(/'/g,"\\'");
-  var html = '<div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;overflow:hidden">'
-    +'<div onclick="mvToggleRubro(\''+safeKey+'\')" style="padding:10px 13px;cursor:pointer">'
+  var html = '<div onclick="mvToggleRubro(\''+safeKey+'\')" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:10px 13px;cursor:pointer">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">'
-    +'<div style="font-size:12px;font-weight:700;color:#202124">'+(expanded?'▾':'▸')+' '+g.key+'</div>'
+    +'<div style="font-size:12px;font-weight:700;color:#202124">'+(expanded?'[-]':'[+]')+' '+g.key+'</div>'
     +'</div>'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
     +'<span style="font-size:15px;font-weight:800;color:#1e88e5">'+fmtV(g.vp)+'</span>'
@@ -1873,7 +1872,6 @@ function mvRubroAccordionCard(g){
     +'</div>'
     +'</div>';
   if(expanded) html += mvRenderRubroClientes(g.key, g.rows);
-  html += '</div>';
   return html;
 }
 
@@ -1917,7 +1915,9 @@ function mvRenderRubroClientes(rubroKey, rows){
   var growthLabel = growthPct===null ? 'sin datos de objetivo' : (growthPct*100>=0?'+':'')+(growthPct*100).toFixed(1)+'%';
   return '<div style="padding:6px 13px;font-size:9.5px;color:#80868b;border-top:1px solid #e8eaed;background:#f1f3f4">'
     +'Crecimiento objetivo división: <b>'+growthLabel+'</b> · objetivo individual = venta año pasado del cliente × (1 + crecimiento)</div>'
-    + rowsHtml;
+    +'<div style="max-height:280px;overflow-y:auto;-webkit-overflow-scrolling:touch">'
+    + rowsHtml
+    +'</div>';
 }
 
 function mvRenderMain(){
