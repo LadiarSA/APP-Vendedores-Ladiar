@@ -3414,10 +3414,10 @@ function supRender(){
   }
 
   var colCount=supTab==='total'?10:9;
-  var th='<table style="width:100%;border-collapse:collapse;font-size:11px">'
-    +'<thead><tr style="background:#7b1fa2;color:#fff;position:sticky;top:0;z-index:1">'
-    +'<th style="padding:8px 6px;text-align:center;width:36px"></th>'
-    +'<th style="padding:8px 10px;text-align:left">Vendedora</th>'
+  var th='<table style="width:100%;border-collapse:collapse;font-size:11px;min-width:560px">'
+    +'<thead><tr style="background:#7b1fa2;color:#fff;position:sticky;top:0;z-index:2">'
+    +'<th style="padding:8px 6px;text-align:center;width:36px;position:sticky;left:0;background:#7b1fa2;z-index:3"></th>'
+    +'<th style="padding:8px 10px;text-align:left;position:sticky;left:36px;background:#7b1fa2;z-index:3;box-shadow:2px 0 4px #0002">Vendedora</th>'
     +'<th style="padding:8px 6px;text-align:left" class="sup-col-zona">Zona</th>';
   if(supTab==='total') th+='<th style="padding:8px 6px;text-align:center">Cartera</th>';
   th+='<th style="padding:8px 6px;text-align:right">Objetivo</th>'
@@ -3441,11 +3441,11 @@ function supRender(){
 
     // Main row
     rows+='<tr style="background:'+bg+';border-bottom:1px solid #eee">';
-    rows+='<td style="padding:6px;text-align:center">'
+    rows+='<td style="padding:6px;text-align:center;position:sticky;left:0;background:'+bg+';z-index:1">'
       +'<button onclick="supExpand(\''+v.code+'\',\''+v.cart+'\')" id="expbtn-'+v.code+'"'
       +' style="width:26px;height:26px;border-radius:6px;border:1.5px solid '+cc+';background:#fff;color:'+cc+';font-weight:800;font-size:13px;cursor:pointer;line-height:1">+</button>'
       +'</td>';
-    rows+='<td style="padding:7px 10px;font-weight:700;color:#202124">'+v.name+'</td>';
+    rows+='<td style="padding:7px 10px;font-weight:700;color:#202124;position:sticky;left:36px;background:'+bg+';z-index:1;box-shadow:2px 0 4px #0001">'+v.name+'</td>';
     rows+='<td style="padding:7px 6px;color:#5f6368;font-size:10px" class="sup-col-zona">'+zs+'</td>';
     if(supTab==='total') rows+='<td style="padding:7px 6px;text-align:center"><span style="background:'+cc+'22;color:'+cc+';border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700">'+v.cart.slice(0,3)+'</span></td>';
     rows+='<td style="padding:7px 6px;text-align:right;color:#5f6368" class="sup-col-obj">'+(isP?supFmt(v.obj_p):supFmtKg(v.obj_kg))+'</td>';
@@ -3887,7 +3887,7 @@ function supFmtKg(n){ return Math.round(n).toLocaleString('es-AR')+' kg'; }
   <!-- KPI summary bar -->
   <div id="sup-kpi-bar" style="background:#fff;border-bottom:1px solid #e8eaed;padding:8px 14px;display:flex;gap:10px;overflow-x:auto;flex-shrink:0"></div>
   <!-- Table -->
-  <div id="sup-table" style="flex:1;min-height:0;overflow-y:scroll;-webkit-overflow-scrolling:touch;padding:10px 14px 80px 14px"></div>
+  <div id="sup-table" style="flex:1;min-height:0;overflow-y:scroll;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:10px 14px 80px 14px"></div>
 </div>
 </body>
 </html>
