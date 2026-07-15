@@ -1544,9 +1544,10 @@ function loadVendorObjCSV(input){
       var iSup=ci('zona de ventas'),iZona=ci('vendedores hoy'),iCart=ci('cartera'),iRub=ci('objetivos rubro');
       var iObjP=ci('objetivo'),iVtaP=ci('ventas acumulada mes'),iPctP=ci('% acumulado');
       var iPrP=ci('venta proyectada mes'),iPrPctP=ci('proyectado $$'),iDifP=ci('objetivo dif $');
-      var iVdiaP=ci('venta x día objetivo'),iVudP=ci('venta $ ultimo día');
+      var iVdiaP=ci('venta x día objetivo'),iVudP=ci('venta $$ ud');
       var iObjKg=ci('objetivo v. kg'),iVtaKg=ci('ventas acumulada kg'),iPctKg=ci('% acumulado kg');
       var iPrKg=ci('venta proyectada mes kg'),iPrPctKg=ci('dif proyectado kg'),iDifKg=ci('objetivo dif kg');
+      var iVdiaKg=ci('venta x día objetivo kg');
       var iDiasV=ci('sales days'),iDiasR=ci('dias restantes'),iUltDia=ci('ultimo');
       var newData=lines.slice(1).filter(function(l){return l.trim();}).map(function(line){
         var c=line.split(',').map(function(x){return x.trim().replace(/"/g,'');});
@@ -1557,6 +1558,7 @@ function loadVendorObjCSV(input){
           vdia_p:(iVdiaP>=0?pm(c[iVdiaP]):0),vud_p:(iVudP>=0?pm(c[iVudP]):0),
           obj_kg:parseFloat(c[iObjKg])||0,vta_kg:parseFloat(c[iVtaKg])||0,pct_kg:pp(c[iPctKg]),
           proy_kg:parseFloat(c[iPrKg])||0,proy_pct_kg:pp(c[iPrPctKg]),dif_kg:parseFloat(c[iDifKg])||0,
+          vdia_kg:(iVdiaKg>=0?parseFloat(c[iVdiaKg])||0:0),
           dias_venta:parseInt(c[iDiasV])||0,dias_rest:parseInt(c[iDiasR])||0,
           ultimo_dia:(c[iUltDia]||'').slice(0,10)};
       }).filter(function(r){return r.zona;});
