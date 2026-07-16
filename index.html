@@ -3478,16 +3478,19 @@ function supDebugScroll(){
     var par=el?el.parentElement:null;
     var appEl=document.getElementById('supervisor-app');
     var cs=el?getComputedStyle(el):null;
-    var info='table scrollH='+(el?el.scrollHeight:'?')+' clientH='+(el?el.clientHeight:'?')+' offsetH='+(el?el.offsetHeight:'?')
-      +' | parent clientH='+(par?par.clientHeight:'?')
-      +' | app display='+(appEl?getComputedStyle(appEl).display:'?')
-      +' | overflowY='+(cs?cs.overflowY:'?')+' pos='+(cs?cs.position:'?')
-      +' | winH='+window.innerHeight;
+    var vv=window.visualViewport;
+    var info='table scrollH='+(el?el.scrollHeight:'?')+' clientH='+(el?el.clientHeight:'?')
+      +' | parentId='+(par?par.id:'?')+' parentClientH='+(par?par.clientHeight:'?')
+      +' | appClientH='+(appEl?appEl.clientHeight:'?')+' appOffsetH='+(appEl?appEl.offsetHeight:'?')
+      +' | docElClientH='+document.documentElement.clientHeight
+      +' | vv.height='+(vv?Math.round(vv.height):'N/A')
+      +' | winH='+window.innerHeight
+      +' | overflowY='+(cs?cs.overflowY:'?');
     var badge=document.getElementById('sup-debug-badge');
     if(!badge){
       badge=document.createElement('div');
       badge.id='sup-debug-badge';
-      badge.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#000;color:#0f0;font-size:9px;padding:5px;z-index:99999;text-align:center;font-family:monospace;word-break:break-all';
+      badge.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#000;color:#0f0;font-size:8px;padding:5px;z-index:99999;text-align:center;font-family:monospace;word-break:break-all;line-height:1.4';
       document.body.appendChild(badge);
     }
     badge.textContent=info;
