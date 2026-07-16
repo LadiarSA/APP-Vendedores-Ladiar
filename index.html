@@ -3408,6 +3408,7 @@ function supRender(){
   if(!data.length){
     html += '<div style="color:#80868b;text-align:center;padding:30px">Sin datos</div>';
     document.getElementById('sup-table').innerHTML = html;
+    supDebugScroll();
     return;
   }
 
@@ -3438,6 +3439,7 @@ function supRender(){
   }).join('');
 
   document.getElementById('sup-table').innerHTML = html;
+  supDebugScroll();
 }
 
 // Detalle por división (rubro) al expandir una vendedora
@@ -3468,6 +3470,30 @@ function supColor(p){ return p>=100?'#2e7d32':p>=85?'#f9a825':'#c62828'; }
 function supFmt(n){ return '$'+Math.round(n).toLocaleString('es-AR'); }
 function supFmtKg(n){ return Math.round(n).toLocaleString('es-AR')+' kg'; }
 
+// DIAGNÓSTICO TEMPORAL: muestra en pantalla los números reales de scroll para
+// entender por qué no se puede bajar. Se puede sacar una vez resuelto el bug.
+function supDebugScroll(){
+  setTimeout(function(){
+    var el=document.getElementById('sup-table');
+    var par=el?el.parentElement:null;
+    var appEl=document.getElementById('supervisor-app');
+    var cs=el?getComputedStyle(el):null;
+    var info='table scrollH='+(el?el.scrollHeight:'?')+' clientH='+(el?el.clientHeight:'?')+' offsetH='+(el?el.offsetHeight:'?')
+      +' | parent clientH='+(par?par.clientHeight:'?')
+      +' | app display='+(appEl?getComputedStyle(appEl).display:'?')
+      +' | overflowY='+(cs?cs.overflowY:'?')+' pos='+(cs?cs.position:'?')
+      +' | winH='+window.innerHeight;
+    var badge=document.getElementById('sup-debug-badge');
+    if(!badge){
+      badge=document.createElement('div');
+      badge.id='sup-debug-badge';
+      badge.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#000;color:#0f0;font-size:9px;padding:5px;z-index:99999;text-align:center;font-family:monospace;word-break:break-all';
+      document.body.appendChild(badge);
+    }
+    badge.textContent=info;
+  }, 250);
+}
+
 function supRenderHelados(data){
   // KPI totals for helados
   var hTH=0,hVH=0,hTI=0,hVI=0,hFrz=0;
@@ -3487,6 +3513,7 @@ function supRenderHelados(data){
 
   if(!data.length){
     document.getElementById('sup-table').innerHTML='<div style="color:#80868b;text-align:center;padding:30px">Sin datos</div>';
+    supDebugScroll();
     return;
   }
 
@@ -3508,6 +3535,7 @@ function supRenderHelados(data){
   }).join('');
 
   document.getElementById('sup-table').innerHTML=html;
+  supDebugScroll();
 }
 
 </script>
