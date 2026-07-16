@@ -3420,7 +3420,7 @@ function supRender(){
     var vObj=isP?v.obj_p:v.obj_kg, vVta=isP?v.vta_p:v.vta_kg, vProyAmt=isP?v.proy_p:v.proy_kg, vDif=isP?v.dif_p:v.dif_kg;
     var pc=supColor(proy);
 
-    var card='<div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;margin-bottom:10px">'
+    var card='<div style="background:#fff;border-radius:10px;border:1px solid #e8eaed">'
       +'<div onclick="supToggleVendor(\''+v.code+'\')" style="padding:10px 13px;cursor:pointer">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
       +'<div style="font-size:12.5px;font-weight:700;color:#202124">'+(expanded?'[-]':'[+]')+' '+v.name+'</div>'
@@ -3493,9 +3493,9 @@ function supRenderHelados(data){
   var html=data.map(function(v){
     var h=OBJ_HELADOS.find(function(r){return r.zona.indexOf(v.code)!==-1;});
     if(!h){
-      return '<div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:10px 13px;margin-bottom:10px;color:#80868b;font-size:11px">'+v.name+' — sin datos de helados</div>';
+      return '<div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:10px 13px;color:#80868b;font-size:11px">'+v.name+' — sin datos de helados</div>';
     }
-    return '<div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:10px 13px;margin-bottom:10px">'
+    return '<div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:10px 13px">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
       +'<span style="font-size:12.5px;font-weight:700;color:#202124">'+v.name+'</span>'
       +'<span style="font-size:10px;color:#5f6368;font-weight:700">'+h.freezer+' freezers</span>'
@@ -3751,7 +3751,7 @@ function supRenderHelados(data){
   <!-- KPI summary bar -->
   <div id="sup-kpi-bar" style="background:#fff;border-bottom:1px solid #e8eaed;padding:8px 14px;display:flex;gap:10px;overflow-x:auto;flex-shrink:0"></div>
   <!-- Table -->
-  <div id="sup-table" style="flex:1;min-height:0;overflow-y:scroll;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:10px 14px 80px 14px"></div>
+  <div id="sup-table" style="flex:1;min-height:0;overflow-y:scroll;-webkit-overflow-scrolling:touch;padding:10px 14px 80px 14px;display:flex;flex-direction:column;gap:10px"></div>
 </div>
 </body>
 </html>
