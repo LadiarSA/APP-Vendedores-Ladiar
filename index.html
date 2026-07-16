@@ -3361,6 +3361,13 @@ function supColor(p){ return p>=100?'#2e7d32':p>=85?'#f9a825':'#c62828'; }
 function supFmt(n){ return '$'+Math.round(n).toLocaleString('es-AR'); }
 function supFmtKg(n){ return Math.round(n).toLocaleString('es-AR')+' kg'; }
 
+var supExpandedCode = null; // acordeón de apertura única para la lista de vendedoras
+
+function supToggleVendor(code){
+  supExpandedCode = (supExpandedCode===code) ? null : code;
+  supRender();
+}
+
 function supRender(){
   var all=supGetVendorData();
   var data=all;
@@ -3407,65 +3414,77 @@ function supRender(){
       +'</div>';
   }).join('');
 
-  // If helados view, render helados table instead
+  // If helados view, render helados cards instead
   if(supView==='helados'){
     supRenderHelados(data);
     return;
   }
 
-  var colCount=supTab==='total'?10:9;
-  var th='<table style="width:100%;border-collapse:collapse;font-size:11px;min-width:560px">'
-    +'<thead><tr style="background:#7b1fa2;color:#fff;position:sticky;top:0;z-index:2">'
-    +'<th style="padding:8px 6px;text-align:center;width:36px;position:sticky;left:0;background:#7b1fa2;z-index:3"></th>'
-    +'<th style="padding:8px 10px;text-align:left;position:sticky;left:36px;background:#7b1fa2;z-index:3;box-shadow:2px 0 4px #0002">Vendedora</th>'
-    +'<th style="padding:8px 6px;text-align:left" class="sup-col-zona">Zona</th>';
-  if(supTab==='total') th+='<th style="padding:8px 6px;text-align:center">Cartera</th>';
-  th+='<th style="padding:8px 6px;text-align:right">Objetivo</th>'
-    +'<th style="padding:8px 6px;text-align:right">Acumulado</th>'
-    +'<th style="padding:8px 6px;text-align:center">Acum %</th>'
-    +'<th style="padding:8px 6px;text-align:right" class="sup-col-proy">Proyectado</th>'
-    +'<th style="padding:8px 6px;text-align:center">Proy %</th>'
-    +'<th style="padding:8px 6px;text-align:right">Faltante</th>'
-    +'</tr></thead><tbody>';
+  var fmt = isP?supFmt:supFmtKg;
+  var html = heladosBar;
 
-  var rows='';
-  data.forEach(function(v,i){
+  if(!data.length){
+    html += '<div style="color:#80868b;text-align:center;padding:30px">Sin datos</div>';
+    document.getElementById('sup-table').innerHTML = html;
+    return;
+  }
+
+  html += data.map(function(v){
     var proy=isP?v.pr_pct_p:v.pr_pct_kg;
     var acum=isP?v.pct_p:v.pct_kg;
-    var pc=supColor(proy), ac=supColor(acum);
     var difOk=isP?v.dif_p>=0:v.dif_kg>=0;
-    var bg=i%2?'#f8f9fa':'#fff';
-    var bw=Math.min(isP?v.pct_p:v.pct_kg,100);
-    var zs=v.zona.replace(/\d+[\s]*-[\s]*\d+[\s]*-?[\s]*/,'').trim();
     var cc=v.cart==='IMPULSO'?'#7b1fa2':'#1565c0';
+    var expanded=supExpandedCode===v.code;
+    var vObj=isP?v.obj_p:v.obj_kg, vVta=isP?v.vta_p:v.vta_kg, vProyAmt=isP?v.proy_p:v.proy_kg, vDif=isP?v.dif_p:v.dif_kg;
+    var pc=supColor(proy);
 
-    // Main row
-    rows+='<tr style="background:'+bg+';border-bottom:1px solid #eee">';
-    rows+='<td style="padding:6px;text-align:center;position:sticky;left:0;background:'+bg+';z-index:1">'
-      +'<button onclick="supExpand(\''+v.code+'\',\''+v.cart+'\')" id="expbtn-'+v.code+'"'
-      +' style="width:26px;height:26px;border-radius:6px;border:1.5px solid '+cc+';background:#fff;color:'+cc+';font-weight:800;font-size:13px;cursor:pointer;line-height:1">+</button>'
-      +'</td>';
-    rows+='<td style="padding:7px 10px;font-weight:700;color:#202124;position:sticky;left:36px;background:'+bg+';z-index:1;box-shadow:2px 0 4px #0001">'+v.name+'</td>';
-    rows+='<td style="padding:7px 6px;color:#5f6368;font-size:10px" class="sup-col-zona">'+zs+'</td>';
-    if(supTab==='total') rows+='<td style="padding:7px 6px;text-align:center"><span style="background:'+cc+'22;color:'+cc+';border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700">'+v.cart.slice(0,3)+'</span></td>';
-    rows+='<td style="padding:7px 6px;text-align:right;color:#5f6368" class="sup-col-obj">'+(isP?supFmt(v.obj_p):supFmtKg(v.obj_kg))+'</td>';
-    rows+='<td style="padding:7px 6px;text-align:right">'
-      +'<div>'+(isP?supFmt(v.vta_p):supFmtKg(v.vta_kg))+'</div>'
-      +'<div style="background:#e8eaed;border-radius:3px;height:4px;margin-top:3px"><div style="width:'+bw+'%;background:'+supColor(proy)+';height:100%;border-radius:3px"></div></div>'
-      +'</td>';
-    rows+='<td style="padding:7px 6px;text-align:center;font-weight:800;color:'+ac+'">'+acum.toFixed(1)+'%</td>';
-    rows+='<td style="padding:7px 6px;text-align:right;color:#5f6368" class="sup-col-proy">'+(isP?supFmt(v.proy_p):supFmtKg(v.proy_kg))+'</td>';
-    rows+='<td style="padding:7px 6px;text-align:center;font-weight:800"><span style="background:'+pc+'18;color:'+pc+';border-radius:6px;padding:2px 7px">'+proy.toFixed(1)+'%</span></td>';
-    rows+='<td style="padding:7px 6px;text-align:right;font-weight:700;color:'+(difOk?'#2e7d32':'#c62828')+'">'+(difOk?'OK ':'')+(isP?supFmt(Math.abs(v.dif_p)):supFmtKg(Math.abs(v.dif_kg)))+'</td>';
-    rows+='</tr>';
-    // Hidden detail row
-    rows+='<tr id="exprow-'+v.code+'" style="display:none"><td colspan="'+colCount+'" style="padding:0;border-bottom:2px solid '+cc+'"></td></tr>';
-  });
+    var card='<div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;margin-bottom:10px;overflow:hidden">'
+      +'<div onclick="supToggleVendor(\''+v.code+'\')" style="padding:10px 13px;cursor:pointer">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
+      +'<div style="font-size:12.5px;font-weight:700;color:#202124">'+(expanded?'[-]':'[+]')+' '+v.name+'</div>'
+      +(supTab==='total'?'<span style="font-size:10px;font-weight:700;background:'+cc+'18;color:'+cc+';border-radius:5px;padding:2px 8px">'+v.cart.slice(0,3)+'</span>':'')
+      +'</div>'
+      + vpBar(acum, 'Acum. '+fmt(vVta)+' de '+fmt(vObj), proy)
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">'
+      +'<span style="font-size:10.5px;font-weight:700;background:'+pc+'18;color:'+pc+';border-radius:5px;padding:2px 8px">Proy '+proy.toFixed(0)+'% ('+fmt(vProyAmt)+')</span>'
+      +'<span style="font-size:10.5px;font-weight:700;background:'+(difOk?'#e8f5e9':'#ffebee')+';color:'+(difOk?'#2e7d32':'#c62828')+';border-radius:5px;padding:2px 8px">'+(difOk?'OK +':'Faltante ')+fmt(Math.abs(vDif))+'</span>'
+      +'</div>'
+      +'</div>';
+    if(expanded) card += supBuildDivisionDetail(v.code, v.cart, isP);
+    card += '</div>';
+    return card;
+  }).join('');
 
-  document.getElementById('sup-table').innerHTML = heladosBar
-    + th + rows + '</tbody></table>';
+  document.getElementById('sup-table').innerHTML = html;
 }
 
+// Detalle por división (rubro) al expandir una vendedora
+function supBuildDivisionDetail(code, cart, isP){
+  var cc=cart==='IMPULSO'?'#7b1fa2':'#1565c0';
+  var fmt=isP?supFmt:supFmtKg;
+  var objRows=OBJ_DATA_VENDOR.filter(function(r){ return r.zona.indexOf(code)!==-1 && r.cartera===cart; });
+  var html='<div style="padding:8px 13px 4px;border-top:1px solid #e8eaed;background:#fafbfc">'
+    +'<div style="font-size:9.5px;font-weight:800;color:'+cc+';margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Detalle por división</div>';
+  objRows.forEach(function(r){
+    var sr=r.rubro.replace('PLANIFICADO-','').replace('IMPULSO-','').replace(/^\d+\s*-\s*/,'');
+    var acV=isP?r.pct_p:r.pct_kg;
+    var prV=isP?r.proy_pct_p:r.proy_pct_kg;
+    var dif=isP?r.dif_p:r.dif_kg;
+    var difOk=dif>=0;
+    var vObj=isP?r.obj_p:r.obj_kg, vVta=isP?r.vta_p:r.vta_kg;
+    html+='<div style="margin-bottom:9px;padding-bottom:9px;border-bottom:1px solid #eee">'
+      +'<div style="font-size:11px;font-weight:700;color:#202124;margin-bottom:2px">'+sr+'</div>'
+      + vpBar(acV, fmt(vVta)+' de '+fmt(vObj), prV)
+      +'<span style="font-size:10px;font-weight:700;color:'+(difOk?'#2e7d32':'#c62828')+'">'+(difOk?'OK +':'Faltante ')+fmt(Math.abs(dif))+'</span>'
+      +'</div>';
+  });
+  html+='</div>';
+  return html;
+}
+
+function supColor(p){ return p>=100?'#2e7d32':p>=85?'#f9a825':'#c62828'; }
+function supFmt(n){ return '$'+Math.round(n).toLocaleString('es-AR'); }
+function supFmtKg(n){ return Math.round(n).toLocaleString('es-AR')+' kg'; }
 
 function supRenderHelados(data){
   // KPI totals for helados
@@ -3484,167 +3503,30 @@ function supRenderHelados(data){
     +'<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:8px 10px;min-width:95px;flex-shrink:0"><div style="font-size:9px;color:#80868b;font-weight:700;text-transform:uppercase;margin-bottom:2px">Obj. Impulso $</div><div style="font-size:15px;font-weight:800;color:#7b1fa2">'+supFmt(hTI)+'</div></div>'
     +'<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:8px 10px;min-width:95px;flex-shrink:0"><div style="font-size:9px;color:#80868b;font-weight:700;text-transform:uppercase;margin-bottom:2px">Vta. Impulso $</div><div style="font-size:15px;font-weight:800;color:'+supColor(pI)+'">'+supFmt(hVI)+'</div><div style="font-size:10px;font-weight:600;color:'+supColor(pI)+'">'+pI.toFixed(1)+'%</div></div>';
 
-  var tbl='<table style="width:100%;border-collapse:collapse;font-size:11px">'
-    +'<thead><tr style="background:#00838f;color:#fff;position:sticky;top:0;z-index:1">'
-    +'<th style="padding:8px 6px;text-align:center;width:36px"></th>'
-    +'<th style="padding:8px 10px;text-align:left">Vendedora</th>'
-    +'<th style="padding:8px 6px;text-align:center">Frz</th>'
-    +'<th style="padding:8px 6px;text-align:right">Obj.Hogar</th>'
-    +'<th style="padding:8px 6px;text-align:right">Vta.Hogar</th>'
-    +'<th style="padding:8px 6px;text-align:center">% Hogar</th>'
-    +'<th style="padding:8px 6px;text-align:center">Proy.H</th>'
-    +'<th style="padding:8px 6px;text-align:right">Obj.Imp.</th>'
-    +'<th style="padding:8px 6px;text-align:right">Vta.Imp.</th>'
-    +'<th style="padding:8px 6px;text-align:center">% Imp.</th>'
-    +'<th style="padding:8px 6px;text-align:center">Proy.I</th>'
-    +'</tr></thead><tbody>';
+  if(!data.length){
+    document.getElementById('sup-table').innerHTML='<div style="color:#80868b;text-align:center;padding:30px">Sin datos</div>';
+    return;
+  }
 
-  data.forEach(function(v,i){
+  var html=data.map(function(v){
     var h=OBJ_HELADOS.find(function(r){return r.zona.indexOf(v.code)!==-1;});
-    if(!h){ tbl+='<tr><td colspan="11" style="padding:6px 10px;color:#bbb;font-size:10px">'+v.name+' — sin datos de helados</td></tr>'; return; }
-    var bg=i%2?'#f8f9fa':'#fff';
-    tbl+='<tr style="background:'+bg+';border-bottom:1px solid #eee">'
-      +'<td style="padding:6px;text-align:center">'
-        +'<button id="expbtn-'+v.code+'" data-cart="'+v.cart+'" onclick="supExpand(this.id.slice(7),this.dataset.cart)"'
-        +' style="width:24px;height:24px;border-radius:6px;border:1.5px solid #00838f;background:#fff;color:#00838f;font-weight:800;font-size:13px;cursor:pointer;line-height:1">+</button>'
-      +'</td>'
-      +'<td style="padding:7px 10px;font-weight:700;color:#202124">'+v.name+'</td>'
-      +'<td style="padding:7px 6px;text-align:center;color:#5f6368;font-weight:700">'+h.freezer+'</td>'
-      // HOGAR
-      +'<td style="padding:7px 6px;text-align:right;color:#5f6368">'+supFmt(h.h_obj)+'</td>'
-      +'<td style="padding:7px 6px;text-align:right"><div>'+supFmt(h.h_vta)+'</div>'
-        +'<div style="background:#e8eaed;border-radius:2px;height:3px;margin-top:2px"><div style="width:'+Math.min(Math.max(h.h_pct,0),100)+'%;background:'+supColor(h.h_proy_pct)+';height:100%;border-radius:2px"></div></div></td>'
-      +'<td style="padding:7px 6px;text-align:center;font-weight:800;color:'+supColor(h.h_pct)+'">'+h.h_pct.toFixed(1)+'%</td>'
-      +'<td style="padding:7px 6px;text-align:center"><span style="background:'+supColor(h.h_proy_pct)+'18;color:'+supColor(h.h_proy_pct)+';border-radius:5px;padding:1px 6px;font-weight:700">'+h.h_proy_pct.toFixed(0)+'%</span></td>'
-      // IMPULSO
-      +'<td style="padding:7px 6px;text-align:right;color:#5f6368">'+supFmt(h.i_obj)+'</td>'
-      +'<td style="padding:7px 6px;text-align:right"><div>'+supFmt(h.i_vta)+'</div>'
-        +'<div style="background:#e8eaed;border-radius:2px;height:3px;margin-top:2px"><div style="width:'+Math.min(Math.max(h.i_pct,0),100)+'%;background:'+supColor(h.i_proy_pct)+';height:100%;border-radius:2px"></div></div></td>'
-      +'<td style="padding:7px 6px;text-align:center;font-weight:800;color:'+supColor(h.i_pct)+'">'+h.i_pct.toFixed(1)+'%</td>'
-      +'<td style="padding:7px 6px;text-align:center"><span style="background:'+supColor(h.i_proy_pct)+'18;color:'+supColor(h.i_proy_pct)+';border-radius:5px;padding:1px 6px;font-weight:700">'+h.i_proy_pct.toFixed(0)+'%</span></td>'
-      +'</tr>'
-      // Hidden expand row
-      +'<tr id="exprow-'+v.code+'" style="display:none"><td colspan="11" style="padding:0;border-bottom:2px solid #00838f"></td></tr>';
-  });
-
-  tbl+='</tbody></table>';
-  document.getElementById('sup-table').innerHTML=tbl;
-}
-
-function supExpand(code, cart){
-  var row=document.getElementById('exprow-'+code);
-  var btn=document.getElementById('expbtn-'+code);
-  if(!row) return;
-  var isOpen=row.style.display!=='none';
-  if(isOpen){
-    row.style.display='none';
-    if(btn) btn.textContent='+';
-    return;
-  }
-  if(btn) btn.textContent='−';
-  var v=window._supData&&window._supData.find(function(x){return x.code===code;});
-  if(!v){ row.style.display='table-row'; return; }
-  var cc=cart==='IMPULSO'?'#7b1fa2':'#1565c0';
-
-  // If in helados view: show helados HOGAR/IMPULSO detail
-  if(supView==='helados'){
-    var h=OBJ_HELADOS.find(function(r){return r.zona.indexOf(code)!==-1;});
-    var det='<div style="padding:10px 14px;background:#e0f7fa">';
     if(!h){
-      det+='<div style="color:#80868b;font-size:11px">Sin datos de helados para esta zona.</div>';
-    } else {
-      det+='<div style="font-size:10px;font-weight:800;color:#00838f;margin-bottom:6px;text-transform:uppercase">🧊 Helados ('+h.freezer+' freezers)</div>';
-      det+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">';
-      det+='<tr style="background:#00838f;color:#fff">'
-        +'<th style="padding:6px 8px;text-align:left">Segmento</th>'
-        +'<th style="padding:6px 6px;text-align:right">Objetivo $</th>'
-        +'<th style="padding:6px 6px;text-align:right">Acumulado $</th>'
-        +'<th style="padding:6px 6px;text-align:center">Avance %</th>'
-        +'<th style="padding:6px 6px;text-align:center">Proy %</th>'
-        +'<th style="padding:6px 6px;text-align:right">Req/freezer</th>'
-        +'</tr>';
-      var hRows=[
-        {name:'🏠 Hogar',  obj:h.h_obj,vta:h.h_vta,pct:h.h_pct,prP:h.h_proy_pct,xf:h.h_x_frz},
-        {name:'⚡ Impulso',obj:h.i_obj,vta:h.i_vta,pct:h.i_pct,prP:h.i_proy_pct,xf:h.i_x_frz}
-      ];
-      hRows.forEach(function(r){
-        det+='<tr style="border-bottom:1px solid #b2ebf2">'
-          +'<td style="padding:6px 8px;font-weight:700;color:#00838f">'+r.name+'</td>'
-          +'<td style="padding:6px 6px;text-align:right;color:#5f6368">'+supFmt(r.obj)+'</td>'
-          +'<td style="padding:6px 6px;text-align:right"><div>'+supFmt(r.vta)+'</div>'
-            +'<div style="background:#b2dfdb;border-radius:2px;height:3px;margin-top:2px"><div style="width:'+Math.min(Math.max(r.pct,0),100)+'%;background:'+supColor(r.prP)+';height:100%;border-radius:2px"></div></div></td>'
-          +'<td style="padding:6px 6px;text-align:center;font-weight:700;color:'+supColor(r.pct)+'">'+r.pct.toFixed(1)+'%</td>'
-          +'<td style="padding:6px 6px;text-align:center"><span style="background:'+supColor(r.prP)+'22;color:'+supColor(r.prP)+';border-radius:5px;padding:2px 8px;font-weight:700">'+r.prP.toFixed(0)+'%</span></td>'
-          +'<td style="padding:6px 6px;text-align:right;color:#f57f17;font-weight:700">'+supFmt(Math.abs(r.xf))+'</td>'
-          +'</tr>';
-      });
-      det+='</table></div>';
+      return '<div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:10px 13px;margin-bottom:10px;color:#80868b;font-size:11px">'+v.name+' — sin datos de helados</div>';
     }
-    det+='</div>';
-    var td=row.querySelector('td');
-    if(td){ td.innerHTML=det; row.style.display='table-row'; }
-    return;
-  }
+    return '<div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:10px 13px;margin-bottom:10px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+      +'<span style="font-size:12.5px;font-weight:700;color:#202124">'+v.name+'</span>'
+      +'<span style="font-size:10px;color:#5f6368;font-weight:700">'+h.freezer+' freezers</span>'
+      +'</div>'
+      +'<div style="font-size:10px;font-weight:800;color:#00838f;margin-bottom:2px">🏠 HOGAR</div>'
+      + vpBar(h.h_pct, supFmt(h.h_vta)+' de '+supFmt(h.h_obj), h.h_proy_pct)
+      +'<div style="font-size:10px;font-weight:800;color:#7b1fa2;margin:8px 0 2px">⚡ IMPULSO</div>'
+      + vpBar(h.i_pct, supFmt(h.i_vta)+' de '+supFmt(h.i_obj), h.i_proy_pct)
+      +'</div>';
+  }).join('');
 
-  var isP=window._supIsP;
-  // Rubro breakdown
-  var objRows=OBJ_DATA_VENDOR.filter(function(r){
-    return r.zona.indexOf(code)!==-1 && r.cartera===cart;
-  });
-
-  var det='<div style="padding:10px 14px;background:#f8f9ff">';
-  det+='<div style="font-size:10px;font-weight:800;color:'+cc+';margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Detalle por División</div>';
-  det+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:10px;min-width:500px">';
-  det+='<tr style="background:'+cc+';color:#fff">'
-    +'<th style="padding:5px 8px;text-align:left">División</th>'
-    +'<th style="padding:5px 6px;text-align:right">Objetivo</th>'
-    +'<th style="padding:5px 6px;text-align:right">Acumulado</th>'
-    +'<th style="padding:5px 6px;text-align:center">Acum %</th>'
-    +'<th style="padding:5px 6px;text-align:center">Proy %</th>'
-    +'<th style="padding:5px 6px;text-align:right">Faltante</th>'
-    +'</tr>';
-  objRows.forEach(function(r){
-    var sr=r.rubro.replace('PLANIFICADO-','').replace('IMPULSO-','').replace(/^\d+\s*-\s*/,'');
-    var acV=isP?r.pct_p:r.pct_kg;
-    var prV=isP?r.proy_pct_p:r.proy_pct_kg;
-    var dif=isP?r.dif_p:r.dif_kg;
-    var difOk=dif>=0;
-    det+='<tr style="border-bottom:1px solid #e0e0e0">'
-      +'<td style="padding:5px 8px;font-weight:600">'+sr+'</td>'
-      +'<td style="padding:5px 6px;text-align:right;color:#5f6368">'+(isP?supFmt(r.obj_p):supFmtKg(r.obj_kg))+'</td>'
-      +'<td style="padding:5px 6px;text-align:right">'
-        +'<div>'+(isP?supFmt(r.vta_p):supFmtKg(r.vta_kg))+'</div>'
-        +'<div style="background:#e8eaed;border-radius:2px;height:3px;margin-top:2px"><div style="width:'+Math.min(Math.max(acV,0),100)+'%;background:'+supColor(prV)+';height:100%;border-radius:2px"></div></div>'
-      +'</td>'
-      +'<td style="padding:5px 6px;text-align:center;font-weight:700;color:'+supColor(acV)+'">'+acV.toFixed(1)+'%</td>'
-      +'<td style="padding:5px 6px;text-align:center"><span style="background:'+supColor(prV)+'22;color:'+supColor(prV)+';border-radius:5px;padding:1px 6px;font-weight:700">'+prV.toFixed(0)+'%</span></td>'
-      +'<td style="padding:5px 6px;text-align:right;font-weight:700;color:'+(difOk?'#2e7d32':'#c62828')+'">'+(difOk?'+':'')+(isP?supFmt(Math.abs(dif)):supFmtKg(Math.abs(dif)))+'</td>'
-      +'</tr>';
-  });
-  det+='</table></div>';
-
-  
-  det+='</div>';
-
-  var td=row.querySelector('td');
-  if(td){ td.innerHTML=det; row.style.display='table-row'; }
+  document.getElementById('sup-table').innerHTML=html;
 }
-
-
-function supColor(p){ return p>=100?'#2e7d32':p>=85?'#f9a825':'#c62828'; }
-function supFmt(n){ return '$'+Math.round(n).toLocaleString('es-AR'); }
-function supFmtKg(n){ return Math.round(n).toLocaleString('es-AR')+' kg'; }
-
-
-
-
-
-
-function supColor(p){ return p>=100?'#2e7d32':p>=85?'#f9a825':'#c62828'; }
-function supFmt(n){ return '$'+Math.round(n).toLocaleString('es-AR'); }
-function supFmtKg(n){ return Math.round(n).toLocaleString('es-AR')+' kg'; }
-
-
 
 </script>
 
