@@ -3385,24 +3385,6 @@ function supRender(){
   var pctK=tOK?tVK/tOK*100:0, prPctK=tOK?tPK/tOK*100:0;
   var isP=window._supIsP;
 
-  // Helados summary bar for IMPULSO
-  var heladosBar='';
-  if(supTab==='impulso'){
-    var hTH=0,hVH=0,hTI=0,hVI=0,hFrz=0;
-    data.forEach(function(v){
-      var h=OBJ_HELADOS.find(function(r){return r.zona.indexOf(v.code)!==-1;});
-      if(!h) return;
-      hTH+=h.h_obj;hVH+=h.h_vta;hTI+=h.i_obj;hVI+=h.i_vta;hFrz+=h.freezer;
-    });
-    var pH=hTH?hVH/hTH*100:0, pI=hTI?hVI/hTI*100:0;
-    heladosBar='<div style="display:flex;gap:12px;align-items:center;padding:7px 16px;background:#e0f7fa;border-bottom:1px solid #b2ebf2;flex-shrink:0;flex-wrap:wrap">'
-      +'<span style="font-size:11px;font-weight:800;color:#00838f">🧊 HELADOS TOTAL:</span>'
-      +'<span style="font-size:11px;color:#00838f">Hogar: <b>'+supFmt(hVH)+'</b> ('+pH.toFixed(1)+'%)</span>'
-      +'<span style="font-size:11px;color:#7b1fa2">Impulso: <b>'+supFmt(hVI)+'</b> ('+pI.toFixed(1)+'%)</span>'
-      +'<span style="font-size:11px;color:#5f6368">'+hFrz+' freezers</span>'
-      +'</div>';
-  }
-
   var kpis=isP
     ?[{l:'Objetivo $',v:supFmt(tOP),c:'#7b1fa2'},{l:'Acumulado $',v:supFmt(tVP),c:supColor(pctP),s:pctP.toFixed(1)+'%'},{l:'Proyectado $',v:supFmt(tPP),c:supColor(prPctP),s:prPctP.toFixed(1)+'%'},{l:'Vendedoras',v:data.length+'',c:'#5f6368'}]
     :[{l:'Objetivo KG',v:supFmtKg(tOK),c:'#7b1fa2'},{l:'Acumulado KG',v:supFmtKg(tVK),c:supColor(pctK),s:pctK.toFixed(1)+'%'},{l:'Proyectado KG',v:supFmtKg(tPK),c:supColor(prPctK),s:prPctK.toFixed(1)+'%'},{l:'Vendedoras',v:data.length+'',c:'#5f6368'}];
@@ -3421,7 +3403,7 @@ function supRender(){
   }
 
   var fmt = isP?supFmt:supFmtKg;
-  var html = heladosBar;
+  var html = '';
 
   if(!data.length){
     html += '<div style="color:#80868b;text-align:center;padding:30px">Sin datos</div>';
@@ -3438,7 +3420,7 @@ function supRender(){
     var vObj=isP?v.obj_p:v.obj_kg, vVta=isP?v.vta_p:v.vta_kg, vProyAmt=isP?v.proy_p:v.proy_kg, vDif=isP?v.dif_p:v.dif_kg;
     var pc=supColor(proy);
 
-    var card='<div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;margin-bottom:10px;overflow:hidden">'
+    var card='<div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;margin-bottom:10px">'
       +'<div onclick="supToggleVendor(\''+v.code+'\')" style="padding:10px 13px;cursor:pointer">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
       +'<div style="font-size:12.5px;font-weight:700;color:#202124">'+(expanded?'[-]':'[+]')+' '+v.name+'</div>'
