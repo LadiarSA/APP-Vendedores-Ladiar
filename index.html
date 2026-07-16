@@ -348,7 +348,8 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
 
 <script>
 let RAW_DATA = [];
-const SUPERVISOR_LOGINS = {'terlizzi':'L26','agapito':'L26'};
+const SUPERVISOR_LOGINS = {'05':'0273','06':'1065','08':'0195'};
+const SUPERVISOR_NAMES  = {'05':'AGAPITO','06':'TERLIZZI','08':'MARTINI'};
 const ADMIN_LOGINS = {'admin':'admin2025'};
 let currentSupervisor = null;
 let currentAdmin = null;
@@ -3284,7 +3285,7 @@ function initSupervisorApp(){
   document.getElementById('tabs').style.display='none';
   document.getElementById('content').style.display='none';
   var supEl=document.getElementById('sup-name');
-  if(supEl) supEl.textContent=(currentSupervisor==='terlizzi'?'TERLIZZI':'AGAPITO').toUpperCase()+' — Supervisión';
+  if(supEl) supEl.textContent=(SUPERVISOR_NAMES[currentSupervisor]||currentSupervisor||'').toUpperCase()+' — Supervisión';
   supSetTab('total');
   initSupCal();
 }
@@ -3408,7 +3409,6 @@ function supRender(){
   if(!data.length){
     html += '<div style="color:#80868b;text-align:center;padding:30px">Sin datos</div>';
     document.getElementById('sup-table').innerHTML = html;
-    supDebugScroll();
     return;
   }
 
@@ -3439,7 +3439,6 @@ function supRender(){
   }).join('');
 
   document.getElementById('sup-table').innerHTML = html;
-  supDebugScroll();
 }
 
 // Detalle por división (rubro) al expandir una vendedora
@@ -3472,30 +3471,6 @@ function supFmtKg(n){ return Math.round(n).toLocaleString('es-AR')+' kg'; }
 
 // DIAGNÓSTICO TEMPORAL: muestra en pantalla los números reales de scroll para
 // entender por qué no se puede bajar. Se puede sacar una vez resuelto el bug.
-function supDebugScroll(){
-  setTimeout(function(){
-    var el=document.getElementById('sup-table');
-    var par=el?el.parentElement:null;
-    var appEl=document.getElementById('supervisor-app');
-    var cs=el?getComputedStyle(el):null;
-    var vv=window.visualViewport;
-    var info='table scrollH='+(el?el.scrollHeight:'?')+' clientH='+(el?el.clientHeight:'?')
-      +' | parentId='+(par?par.id:'?')+' parentClientH='+(par?par.clientHeight:'?')
-      +' | appClientH='+(appEl?appEl.clientHeight:'?')+' appOffsetH='+(appEl?appEl.offsetHeight:'?')
-      +' | docElClientH='+document.documentElement.clientHeight
-      +' | vv.height='+(vv?Math.round(vv.height):'N/A')
-      +' | winH='+window.innerHeight
-      +' | overflowY='+(cs?cs.overflowY:'?');
-    var badge=document.getElementById('sup-debug-badge');
-    if(!badge){
-      badge=document.createElement('div');
-      badge.id='sup-debug-badge';
-      badge.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#000;color:#0f0;font-size:8px;padding:5px;z-index:99999;text-align:center;font-family:monospace;word-break:break-all;line-height:1.4';
-      document.body.appendChild(badge);
-    }
-    badge.textContent=info;
-  }, 250);
-}
 
 function supRenderHelados(data){
   // KPI totals for helados
@@ -3516,7 +3491,6 @@ function supRenderHelados(data){
 
   if(!data.length){
     document.getElementById('sup-table').innerHTML='<div style="color:#80868b;text-align:center;padding:30px">Sin datos</div>';
-    supDebugScroll();
     return;
   }
 
@@ -3538,7 +3512,6 @@ function supRenderHelados(data){
   }).join('');
 
   document.getElementById('sup-table').innerHTML=html;
-  supDebugScroll();
 }
 
 </script>
@@ -3766,6 +3739,7 @@ function supRenderHelados(data){
       </div>
       <button onclick="doLogout()" style="background:#fff2;color:#fff;border:1.5px solid #fff4;border-radius:8px;padding:5px 14px;font-weight:700;font-size:12px;cursor:pointer">Salir</button>
     </div>
+  </div>
   </div>
   <!-- Tab buttons -->
   <div style="background:#fff;border-bottom:2px solid #e8eaed;display:flex;flex-shrink:0">
