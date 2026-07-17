@@ -291,10 +291,10 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
   <!-- Filters toggle -->
   <div onclick="mvToggleFilters()" style="background:#fff;border-bottom:1px solid #e8eaed;padding:6px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;flex-shrink:0">
     <span style="font-size:11px;font-weight:700;color:#5f6368">🔍 Filtros</span>
-    <span id="mv-filters-arrow" style="font-size:11px;color:#5f6368;font-weight:700">▾ Ocultar</span>
+    <span id="mv-filters-arrow" style="font-size:11px;color:#5f6368;font-weight:700">▸ Mostrar</span>
   </div>
   <!-- Filters -->
-  <div id="mv-filters-panel" style="background:#fff;border-bottom:1px solid #e8eaed;padding:8px 14px;display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;align-items:center">
+  <div id="mv-filters-panel" style="background:#fff;border-bottom:1px solid #e8eaed;padding:8px 14px;display:none;gap:8px;flex-shrink:0;flex-wrap:wrap;align-items:center">
     <select id="mv-rubro" onchange="mvApplyFilters()" style="font-size:11px;padding:5px 8px;border:1.5px solid #e8eaed;border-radius:8px;flex:1;min-width:140px">
       <option value="">Todos los rubros</option>
     </select>
@@ -318,8 +318,13 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
     <button id="mv-metric-total" onclick="mvSetMetric('total')" style="flex:1;padding:6px 10px;border-radius:8px;border:2px solid #1e88e5;background:#1e88e5;color:#fff;font-weight:700;font-size:11px;cursor:pointer">Venta Total</button>
     <button id="mv-metric-tokin" onclick="mvSetMetric('tokin')" style="flex:1;padding:6px 10px;border-radius:8px;border:2px solid #e8eaed;background:#fff;color:#5f6368;font-weight:700;font-size:11px;cursor:pointer">💠 Venta Tokin</button>
   </div>
+  <!-- KPI toggle -->
+  <div onclick="mvToggleKpis()" style="background:#fff;border-bottom:1px solid #e8eaed;padding:6px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;flex-shrink:0">
+    <span style="font-size:11px;font-weight:700;color:#5f6368">📊 Resumen</span>
+    <span id="mv-kpis-arrow" style="font-size:11px;color:#5f6368;font-weight:700">▾ Ocultar</span>
+  </div>
   <!-- KPI bar -->
-  <div id="mv-kpis" style="background:#fff;border-bottom:1px solid #e8eaed;padding:8px 14px;display:flex;gap:10px;overflow-x:auto;flex-shrink:0"></div>
+  <div id="mv-kpis" style="background:#fff;border-bottom:1px solid #e8eaed;padding:8px 14px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;flex-shrink:0"></div>
   <!-- View toggle -->
   <div style="background:#fff;border-bottom:1px solid #e8eaed;padding:6px 14px;display:flex;gap:6px;flex-shrink:0">
     <button id="mv-v-rubro"    onclick="mvSetView('rubro')"    style="padding:5px 14px;border-radius:8px;border:2px solid #1e88e5;background:#1e88e5;color:#fff;font-weight:700;font-size:11px;cursor:pointer">Por Rubro</button>
@@ -1660,11 +1665,18 @@ function getVendorCode(){
   return (VENDOR_PINS[currentVendor]||{}).code||'';
 }
 
-var mvFiltersCollapsed = false;
+var mvFiltersCollapsed = true;
 function mvToggleFilters(){
   mvFiltersCollapsed = !mvFiltersCollapsed;
   document.getElementById('mv-filters-panel').style.display = mvFiltersCollapsed ? 'none' : 'flex';
   document.getElementById('mv-filters-arrow').textContent = mvFiltersCollapsed ? '▸ Mostrar' : '▾ Ocultar';
+}
+
+var mvKpisCollapsed = false;
+function mvToggleKpis(){
+  mvKpisCollapsed = !mvKpisCollapsed;
+  document.getElementById('mv-kpis').style.display = mvKpisCollapsed ? 'none' : 'grid';
+  document.getElementById('mv-kpis-arrow').textContent = mvKpisCollapsed ? '▸ Mostrar' : '▾ Ocultar';
 }
 
 function initMiVenta(){
@@ -1819,9 +1831,9 @@ function mvRenderKPIs(){
     kpis.push({l:'vs. año anterior', v:(vsPAPct===null?'s/d':(vsPAPct>=0?'+':'')+vsPAPct.toFixed(1)+'%'), c:(vsPAPct===null?'#5f6368':(vsPAPct>=0?'#2e7d32':'#c62828'))});
   }
   document.getElementById('mv-kpis').innerHTML=kpis.map(function(k){
-    return '<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:8px 12px;min-width:90px;flex-shrink:0">'
-      +'<div style="font-size:9px;color:#80868b;font-weight:700;text-transform:uppercase;margin-bottom:2px">'+k.l+'</div>'
-      +'<div style="font-size:14px;font-weight:800;color:'+k.c+'">'+k.v+'</div>'
+    return '<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:8px 10px;min-width:0">'
+      +'<div style="font-size:9px;color:#80868b;font-weight:700;text-transform:uppercase;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+k.l+'</div>'
+      +'<div style="font-size:13px;font-weight:800;color:'+k.c+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+k.v+'</div>'
       +'</div>';
   }).join('');
 }
@@ -3290,6 +3302,253 @@ function initSupervisorApp(){
   initSupCal();
 }
 
+var supPage = 'obj';
+function supSetPage(p){
+  supPage = p;
+  var objBtn=document.getElementById('sup-page-obj'), ventaBtn=document.getElementById('sup-page-venta');
+  var objPage=document.getElementById('sup-objetivos-page'), ventaPage=document.getElementById('sup-venta-page');
+  objBtn.style.background=p==='obj'?'#7b1fa2':'transparent'; objBtn.style.color=p==='obj'?'#fff':'#5f6368';
+  ventaBtn.style.background=p==='venta'?'#7b1fa2':'transparent'; ventaBtn.style.color=p==='venta'?'#fff':'#5f6368';
+  objPage.style.display=p==='obj'?'flex':'none';
+  ventaPage.style.display=p==='venta'?'flex':'none';
+  if(p==='venta'){ if(!supMvInited) supMvInit(); else supMvApplyFilters(); }
+}
+
+// ══════════════════════════════════════════════
+// SUPERVISOR — VENTA MES (misma fuente que Mi Venta del vendedor, VENTA_RAW,
+// pero sin restringir por vendedor: agrupa por VENDEDOR como primer nivel,
+// con filtro de vendedor disponible)
+// ══════════════════════════════════════════════
+var supMvInited=false, supMvView='vendedor', supMvFiltered=[];
+var supMvExpandedVendor=null;
+
+function supMvInit(){
+  var rows=VENTA_RAW.r;
+  var codes=[...new Set(rows.map(function(r){return vf(r,'vc');}))].sort();
+  var vendSel=document.getElementById('supmv-vendedor');
+  vendSel.innerHTML='<option value="">Todos los vendedores</option>'+codes.map(function(c){
+    var nm=VENDOR_CODE_TO_NAME[c]||c; return '<option value="'+c+'">'+nm+'</option>';
+  }).join('');
+  var rubros=[...new Set(rows.map(function(r){return vf(r,'ru');}))].sort();
+  document.getElementById('supmv-rubro').innerHTML='<option value="">Todos los rubros</option>'+rubros.map(function(r){return '<option>'+r+'</option>';}).join('');
+  var canales=[...new Set(rows.map(function(r){return vf(r,'ca');}))].filter(Boolean).sort();
+  document.getElementById('supmv-canal').innerHTML='<option value="">Todos los canales</option>'+canales.map(function(c){return '<option>'+c+'</option>';}).join('');
+  var fechas=[...new Set(rows.map(function(r){return vf(r,'fc');}))].filter(Boolean).sort().reverse();
+  document.getElementById('supmv-fecha').innerHTML='<option value="">Todas las fechas</option>'+fechas.map(function(f){return '<option>'+f+'</option>';}).join('');
+  supMvInited=true;
+  supMvApplyFilters();
+}
+
+function supMvUpdateSegmentos(selectedRubro){
+  var rows=VENTA_RAW.r.filter(function(r){ return !selectedRubro || vf(r,'ru')===selectedRubro; });
+  var segs=[...new Set(rows.map(function(r){return vf(r,'sg');}))].sort();
+  document.getElementById('supmv-segmento').innerHTML='<option value="">Todos los segmentos</option>'+segs.map(function(s){return '<option>'+s+'</option>';}).join('');
+}
+
+function supMvToggleFilters(){
+  var panel=document.getElementById('supmv-filters-panel');
+  var collapsed = panel.style.display==='none';
+  panel.style.display = collapsed?'flex':'none';
+  document.getElementById('supmv-filters-arrow').textContent = collapsed?'▾ Ocultar':'▸ Mostrar';
+}
+
+function supMvToggleKpis(){
+  var el=document.getElementById('supmv-kpis');
+  var collapsed = el.style.display==='none';
+  el.style.display = collapsed?'grid':'none';
+  document.getElementById('supmv-kpis-arrow').textContent = collapsed?'▾ Ocultar':'▸ Mostrar';
+}
+
+function supMvApplyFilters(){
+  var vend=document.getElementById('supmv-vendedor').value;
+  var rubro=document.getElementById('supmv-rubro').value;
+  var seg=document.getElementById('supmv-segmento').value;
+  var canal=document.getElementById('supmv-canal').value;
+  var fecha=document.getElementById('supmv-fecha').value;
+  var cli=(document.getElementById('supmv-cliente').value||'').toLowerCase();
+  var sort=document.getElementById('supmv-sort').value;
+
+  supMvUpdateSegmentos(rubro);
+  if(seg && !document.querySelector('#supmv-segmento option[value="'+seg+'"]')) seg='';
+
+  supMvFiltered=VENTA_RAW.r.filter(function(r){
+    return (!vend  || vf(r,'vc')===vend)
+      && (!rubro || vf(r,'ru')===rubro)
+      && (!seg   || vf(r,'sg')===seg)
+      && (!canal || vf(r,'ca')===canal)
+      && (!fecha || vf(r,'fc')===fecha)
+      && (!cli   || vf(r,'cl').toLowerCase().indexOf(cli)!==-1);
+  });
+
+  supMvFiltered.sort(function(a,b){
+    if(sort==='vp_desc') return vf(b,'vp')-vf(a,'vp');
+    if(sort==='vp_asc')  return vf(a,'vp')-vf(b,'vp');
+    if(sort==='mg_desc') return vf(b,'mg')-vf(a,'mg');
+    return 0;
+  });
+
+  supMvRenderKPIs();
+  supMvRenderMain();
+}
+
+function supMvClearFilters(){
+  document.getElementById('supmv-vendedor').value='';
+  document.getElementById('supmv-rubro').value='';
+  document.getElementById('supmv-canal').value='';
+  document.getElementById('supmv-fecha').value='';
+  document.getElementById('supmv-cliente').value='';
+  supMvUpdateSegmentos('');
+  document.getElementById('supmv-segmento').value='';
+  supMvApplyFilters();
+}
+
+function supMvRenderKPIs(){
+  var totVP=0,totMG=0,totBN=0,totKG=0,totBU=0,totPV=0,clientes=new Set(),vendedores=new Set();
+  supMvFiltered.forEach(function(r){
+    totVP+=vf(r,'vp'); totMG+=vf(r,'mg'); totBN+=vf(r,'bn');
+    totKG+=vf(r,'kg'); totBU+=vf(r,'bu'); totPV+=vf(r,'pv');
+    clientes.add(vf(r,'cl')); vendedores.add(vf(r,'vc'));
+  });
+  var n=supMvFiltered.length||1;
+  var avgMg=totMG/n; var avgBn=totBN/n;
+
+  document.getElementById('supmv-count').textContent=supMvFiltered.length.toLocaleString('es-AR')+' registros';
+
+  var kpis=[
+    {l:'Venta $',      v:fmtV(totVP),                 c:'#7b1fa2'},
+    {l:'Margen Prom.', v:avgMg.toFixed(1)+'%',         c:mvCol(avgMg)},
+    {l:'Desc. Prom.',  v:avgBn.toFixed(1)+'%',         c:avgBn>5?'#c62828':'#2e7d32'},
+    {l:'Venta KG',     v:fmtN(totKG,1)+' kg',          c:'#5f6368'},
+    {l:'Venta BU',     v:fmtN(totBU,0)+' u.',          c:'#5f6368'},
+    {l:'Clientes',     v:clientes.size+'',             c:'#5f6368'},
+    {l:'Productos',    v:totPV+'',                     c:'#5f6368'},
+    {l:'Vendedores',   v:vendedores.size+'',           c:'#5f6368'},
+  ];
+  document.getElementById('supmv-kpis').innerHTML=kpis.map(function(k){
+    return '<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:8px 10px;min-width:0">'
+      +'<div style="font-size:9px;color:#80868b;font-weight:700;text-transform:uppercase;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+k.l+'</div>'
+      +'<div style="font-size:13px;font-weight:800;color:'+k.c+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+k.v+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function supMvGroupBy(field){
+  var groups={};
+  supMvFiltered.forEach(function(r){
+    var key=vf(r,field);
+    if(!groups[key]) groups[key]={key:key,rows:[],vp:0,mg:0,bn:0,kg:0,bu:0,pv:0,clientes:new Set()};
+    var g=groups[key];
+    g.rows.push(r); g.vp+=vf(r,'vp'); g.mg+=vf(r,'mg'); g.bn+=vf(r,'bn');
+    g.kg+=vf(r,'kg'); g.bu+=vf(r,'bu'); g.pv+=vf(r,'pv');
+    g.clientes.add(vf(r,'cl'));
+  });
+  return Object.values(groups).map(function(g){
+    var n=g.rows.length||1;
+    return Object.assign({},g,{avgMg:g.mg/n, avgBn:g.bn/n, nCli:g.clientes.size});
+  });
+}
+
+function supMvSetView(v){
+  supMvView=v;
+  ['vendedor','rubro','segmento','cliente'].forEach(function(vv){
+    var el=document.getElementById('supmv-v-'+vv); if(!el) return;
+    var act=vv===v;
+    el.style.background=act?'#7b1fa2':'#fff';
+    el.style.color=act?'#fff':'#5f6368';
+    el.style.borderColor=act?'#7b1fa2':'#e8eaed';
+  });
+  supMvRenderMain();
+}
+
+function supMvToggleVendorExpand(code){
+  supMvExpandedVendor = (supMvExpandedVendor===code) ? null : code;
+  supMvRenderMain();
+}
+
+// Tarjeta simple (Por Rubro / Por Segmento / Por Cliente): sin expandir
+function supMvCard(g, label){
+  var mc=mvCol(g.avgMg);
+  return '<div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:10px 13px">'
+    +'<div style="font-size:12px;font-weight:700;color:#202124;margin-bottom:5px">'+g.key+'</div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+    +'<span style="font-size:15px;font-weight:800;color:#7b1fa2">'+fmtV(g.vp)+'</span>'
+    +'<span style="font-size:11px;background:'+mc+'22;color:'+mc+';border-radius:6px;padding:2px 8px;font-weight:700">Mg '+g.avgMg.toFixed(1)+'%</span>'
+    +'</div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    +'<span style="font-size:10px;color:#5f6368;background:#f1f3f4;border-radius:5px;padding:2px 7px">'+g.nCli+' clientes</span>'
+    +'<span style="font-size:10px;color:#5f6368;background:#f1f3f4;border-radius:5px;padding:2px 7px">'+fmtN(g.kg,1)+' kg</span>'
+    +(g.avgBn>0?'<span style="font-size:10px;color:#c62828;background:#ffebee;border-radius:5px;padding:2px 7px">-'+g.avgBn.toFixed(1)+'% desc.</span>':'')
+    +'</div>'
+    +'</div>';
+}
+
+// Tarjeta de vendedor (Por Vendedor): expandible, muestra desglose por rubro
+function supMvVendorCard(g){
+  var mc=mvCol(g.avgMg);
+  var name=VENDOR_CODE_TO_NAME[g.key]||g.key;
+  var expanded=supMvExpandedVendor===g.key;
+  var card='<div style="background:#fff;border-radius:10px;border:1px solid #e8eaed">'
+    +'<div onclick="supMvToggleVendorExpand(\''+g.key+'\')" style="padding:10px 13px;cursor:pointer">'
+    +'<div style="font-size:12px;font-weight:700;color:#202124;margin-bottom:5px">'+(expanded?'[-]':'[+]')+' '+name+'</div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+    +'<span style="font-size:15px;font-weight:800;color:#7b1fa2">'+fmtV(g.vp)+'</span>'
+    +'<span style="font-size:11px;background:'+mc+'22;color:'+mc+';border-radius:6px;padding:2px 8px;font-weight:700">Mg '+g.avgMg.toFixed(1)+'%</span>'
+    +'</div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    +'<span style="font-size:10px;color:#5f6368;background:#f1f3f4;border-radius:5px;padding:2px 7px">'+g.nCli+' clientes</span>'
+    +'<span style="font-size:10px;color:#5f6368;background:#f1f3f4;border-radius:5px;padding:2px 7px">'+fmtN(g.kg,1)+' kg</span>'
+    +(g.avgBn>0?'<span style="font-size:10px;color:#c62828;background:#ffebee;border-radius:5px;padding:2px 7px">-'+g.avgBn.toFixed(1)+'% desc.</span>':'')
+    +'</div>'
+    +'</div>';
+  if(expanded){
+    var byRubro={};
+    g.rows.forEach(function(r){
+      var ru=vf(r,'ru');
+      if(!byRubro[ru]) byRubro[ru]={vp:0,mg:0,n:0};
+      byRubro[ru].vp+=vf(r,'vp'); byRubro[ru].mg+=vf(r,'mg'); byRubro[ru].n++;
+    });
+    var keys=Object.keys(byRubro).sort(function(a,b){return byRubro[b].vp-byRubro[a].vp;});
+    card+='<div style="padding:8px 13px;border-top:1px solid #e8eaed;background:#fafbfc">'
+      +'<div style="font-size:9.5px;font-weight:800;color:#7b1fa2;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Detalle por rubro</div>'
+      +keys.map(function(k){
+        var rb=byRubro[k]; var avgMg=rb.mg/(rb.n||1); var mc2=mvCol(avgMg);
+        return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+          +'<span style="font-size:11px;color:#202124">'+k+'</span>'
+          +'<span style="font-size:11px;font-weight:700;color:#7b1fa2">'+fmtV(rb.vp)+'</span>'
+          +'<span style="font-size:10px;background:'+mc2+'22;color:'+mc2+';border-radius:5px;padding:1px 6px;font-weight:700">Mg '+avgMg.toFixed(1)+'%</span>'
+          +'</div>';
+      }).join('')
+      +'</div>';
+  }
+  card+='</div>';
+  return card;
+}
+
+function supMvRenderMain(){
+  var el=document.getElementById('supmv-main');
+  if(!supMvFiltered.length){ el.innerHTML='<div style="color:#80868b;text-align:center;padding:30px">Sin datos con estos filtros</div>'; return; }
+
+  var html='';
+  if(supMvView==='vendedor'){
+    var groups=supMvGroupBy('vc');
+    groups.sort(function(a,b){return b.vp-a.vp;});
+    html=groups.map(function(g){return supMvVendorCard(g);}).join('');
+  } else if(supMvView==='rubro'){
+    var groups=supMvGroupBy('ru');
+    groups.sort(function(a,b){return b.vp-a.vp;});
+    html=groups.map(function(g){return supMvCard(g);}).join('');
+  } else if(supMvView==='segmento'){
+    var groups=supMvGroupBy('sg');
+    groups.sort(function(a,b){return b.vp-a.vp;});
+    html=groups.map(function(g){return supMvCard(g);}).join('');
+  } else if(supMvView==='cliente'){
+    var groups=supMvGroupBy('cl');
+    groups.sort(function(a,b){return b.vp-a.vp;});
+    html=groups.map(function(g){return supMvCard(g);}).join('');
+  }
+  el.innerHTML=html;
+}
+
 function supSetTab(t){
   supTab=t;
   ['total','impulso','plan'].forEach(function(tt){
@@ -3741,6 +4000,14 @@ function supRenderHelados(data){
     </div>
   </div>
   </div>
+  <!-- Page toggle -->
+  <div style="background:#fff;border-bottom:2px solid #e8eaed;display:flex;flex-shrink:0">
+    <button id="sup-page-obj"   onclick="supSetPage('obj')"   style="flex:1;padding:10px 8px;border:none;background:#7b1fa2;font-weight:700;font-size:12px;cursor:pointer;color:#fff">📊 OBJETIVOS</button>
+    <button id="sup-page-venta" onclick="supSetPage('venta')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;color:#5f6368">💰 VENTA MES</button>
+  </div>
+
+  <!-- OBJETIVOS PAGE -->
+  <div id="sup-objetivos-page" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden">
   <!-- Tab buttons -->
   <div style="background:#fff;border-bottom:2px solid #e8eaed;display:flex;flex-shrink:0">
     <button id="sup-tab-total"   onclick="supSetTab('total')"   style="flex:1;padding:12px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid #7b1fa2;color:#7b1fa2">TOTAL</button>
@@ -3757,6 +4024,57 @@ function supRenderHelados(data){
   <div id="sup-kpi-bar" style="background:#fff;border-bottom:1px solid #e8eaed;padding:8px 14px;display:flex;gap:10px;overflow-x:auto;flex-shrink:0"></div>
   <!-- Table -->
   <div id="sup-table" style="flex:1;min-height:0;overflow-y:scroll;-webkit-overflow-scrolling:touch;padding:10px 14px 80px 14px;display:flex;flex-direction:column;gap:10px"></div>
+  </div>
+
+  <!-- VENTA MES PAGE -->
+  <div id="sup-venta-page" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden">
+    <!-- Filters toggle -->
+    <div onclick="supMvToggleFilters()" style="background:#fff;border-bottom:1px solid #e8eaed;padding:6px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;flex-shrink:0">
+      <span style="font-size:11px;font-weight:700;color:#5f6368">🔍 Filtros</span>
+      <span id="supmv-filters-arrow" style="font-size:11px;color:#5f6368;font-weight:700">▸ Mostrar</span>
+    </div>
+    <!-- Filters -->
+    <div id="supmv-filters-panel" style="background:#fff;border-bottom:1px solid #e8eaed;padding:8px 14px;display:none;gap:8px;flex-shrink:0;flex-wrap:wrap;align-items:center">
+      <select id="supmv-vendedor" onchange="supMvApplyFilters()" style="font-size:11px;padding:5px 8px;border:1.5px solid #e8eaed;border-radius:8px;flex:1;min-width:140px">
+        <option value="">Todos los vendedores</option>
+      </select>
+      <select id="supmv-rubro" onchange="supMvApplyFilters()" style="font-size:11px;padding:5px 8px;border:1.5px solid #e8eaed;border-radius:8px;flex:1;min-width:140px">
+        <option value="">Todos los rubros</option>
+      </select>
+      <select id="supmv-segmento" onchange="supMvApplyFilters()" style="font-size:11px;padding:5px 8px;border:1.5px solid #e8eaed;border-radius:8px;flex:1;min-width:140px">
+        <option value="">Todos los segmentos</option>
+      </select>
+      <select id="supmv-canal" onchange="supMvApplyFilters()" style="font-size:11px;padding:5px 8px;border:1.5px solid #e8eaed;border-radius:8px;flex:1;min-width:140px">
+        <option value="">Todos los canales</option>
+      </select>
+      <select id="supmv-fecha" onchange="supMvApplyFilters()" style="font-size:11px;padding:5px 8px;border:1.5px solid #e8eaed;border-radius:8px;flex:1;min-width:140px">
+        <option value="">Todas las fechas</option>
+      </select>
+      <input id="supmv-cliente" oninput="supMvApplyFilters()" placeholder="🔍 Buscar cliente..." style="font-size:11px;padding:5px 10px;border:1.5px solid #e8eaed;border-radius:8px;flex:1;min-width:130px">
+      <button onclick="supMvClearFilters()" style="padding:5px 12px;border-radius:8px;border:1.5px solid #e8eaed;background:#fff;color:#5f6368;font-size:11px;font-weight:700;cursor:pointer">✕ Limpiar</button>
+    </div>
+    <!-- KPI toggle -->
+    <div onclick="supMvToggleKpis()" style="background:#fff;border-bottom:1px solid #e8eaed;padding:6px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;flex-shrink:0">
+      <span style="font-size:11px;font-weight:700;color:#5f6368">📊 Resumen</span>
+      <span id="supmv-kpis-arrow" style="font-size:11px;color:#5f6368;font-weight:700">▾ Ocultar</span>
+    </div>
+    <!-- KPI grid -->
+    <div id="supmv-kpis" style="background:#fff;border-bottom:1px solid #e8eaed;padding:8px 14px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;flex-shrink:0"></div>
+    <!-- View toggle -->
+    <div style="background:#fff;border-bottom:1px solid #e8eaed;padding:8px 14px;display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
+      <button id="supmv-v-vendedor" onclick="supMvSetView('vendedor')" style="padding:5px 14px;border-radius:8px;border:2px solid #7b1fa2;background:#7b1fa2;color:#fff;font-weight:700;font-size:11px;cursor:pointer">Por Vendedor</button>
+      <button id="supmv-v-rubro"    onclick="supMvSetView('rubro')"    style="padding:5px 14px;border-radius:8px;border:2px solid #e8eaed;background:#fff;color:#5f6368;font-weight:700;font-size:11px;cursor:pointer">Por Rubro</button>
+      <button id="supmv-v-segmento" onclick="supMvSetView('segmento')" style="padding:5px 14px;border-radius:8px;border:2px solid #e8eaed;background:#fff;color:#5f6368;font-weight:700;font-size:11px;cursor:pointer">Por Segmento</button>
+      <button id="supmv-v-cliente"  onclick="supMvSetView('cliente')"  style="padding:5px 14px;border-radius:8px;border:2px solid #e8eaed;background:#fff;color:#5f6368;font-weight:700;font-size:11px;cursor:pointer">Por Cliente</button>
+    </div>
+    <!-- Ordenar + registros -->
+    <div style="background:#f8f9fa;border-bottom:1px solid #e8eaed;padding:6px 14px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+      <span style="font-size:10.5px;color:#5f6368;font-weight:700">ORDENAR: <select id="supmv-sort" onchange="supMvApplyFilters()" style="font-size:10.5px;padding:3px 6px;border:1px solid #e8eaed;border-radius:6px"><option value="vp_desc">Mayor venta $</option><option value="vp_asc">Menor venta $</option><option value="mg_desc">Mayor margen</option></select></span>
+      <span id="supmv-count" style="font-size:10.5px;color:#80868b"></span>
+    </div>
+    <!-- Main list -->
+    <div id="supmv-main" style="flex:1;min-height:0;overflow-y:scroll;-webkit-overflow-scrolling:touch;padding:10px 14px 80px 14px;display:flex;flex-direction:column;gap:10px"></div>
+  </div>
 </div>
 </body>
 </html>
