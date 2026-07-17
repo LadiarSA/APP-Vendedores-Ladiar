@@ -3325,8 +3325,8 @@ function supSetPage(p){
   supPage = p;
   var objBtn=document.getElementById('sup-page-obj'), ventaBtn=document.getElementById('sup-page-venta');
   var objPage=document.getElementById('sup-objetivos-page'), ventaPage=document.getElementById('sup-venta-page');
-  objBtn.style.background=p==='obj'?'#7b1fa2':'#f1f3f4'; objBtn.style.color=p==='obj'?'#fff':'#5f6368'; objBtn.style.borderColor=p==='obj'?'#7b1fa2':'#f1f3f4';
-  ventaBtn.style.background=p==='venta'?'#7b1fa2':'#f1f3f4'; ventaBtn.style.color=p==='venta'?'#fff':'#5f6368'; ventaBtn.style.borderColor=p==='venta'?'#7b1fa2':'#f1f3f4';
+  objBtn.style.color=p==='obj'?'#7b1fa2':'#80868b'; objBtn.style.borderBottomColor=p==='obj'?'#7b1fa2':'transparent';
+  ventaBtn.style.color=p==='venta'?'#7b1fa2':'#80868b'; ventaBtn.style.borderBottomColor=p==='venta'?'#7b1fa2':'transparent';
   objPage.style.display=p==='obj'?'flex':'none';
   ventaPage.style.display=p==='venta'?'flex':'none';
   if(p==='venta'){ if(!supMvInited) supMvInit(); else supMvApplyFilters(); }
@@ -4040,8 +4040,8 @@ function supRenderHelados(data){
   </div>
   <!-- Page toggle -->
   <div style="background:#fff;border-bottom:2px solid #e8eaed;display:flex;flex-shrink:0">
-    <button id="sup-page-obj"   onclick="supSetPage('obj')"   style="flex:1;padding:9px 8px;border:2px solid #7b1fa2;border-bottom:none;background:#7b1fa2;font-weight:700;font-size:12px;cursor:pointer;color:#fff;border-radius:8px 8px 0 0;margin:0 1px">📊 OBJETIVOS</button>
-    <button id="sup-page-venta" onclick="supSetPage('venta')" style="flex:1;padding:9px 8px;border:2px solid #f1f3f4;border-bottom:none;background:#f1f3f4;font-weight:700;font-size:12px;cursor:pointer;color:#5f6368;border-radius:8px 8px 0 0;margin:0 1px">💰 VENTA MES</button>
+    <button id="sup-page-obj"   onclick="supSetPage('obj')"   style="flex:1;padding:11px 8px;border:none;border-bottom:3px solid #7b1fa2;background:#fff;font-weight:700;font-size:12px;cursor:pointer;color:#7b1fa2">📊 OBJETIVOS</button>
+    <button id="sup-page-venta" onclick="supSetPage('venta')" style="flex:1;padding:11px 8px;border:none;border-bottom:3px solid transparent;background:#fff;font-weight:700;font-size:12px;cursor:pointer;color:#80868b">💰 VENTA MES</button>
   </div>
 
   <!-- OBJETIVOS PAGE -->
