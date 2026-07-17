@@ -286,6 +286,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
       <div style="color:#fff;font-weight:800;font-size:14px">💰 Mi Venta del Mes</div>
       <div id="mv-subtitle" style="color:#bbdefb;font-size:11px"></div>
     </div>
+    <div id="mv-progreso" style="color:#fff;font-size:12px;font-weight:700;text-align:right"></div>
 
   </div>
   <!-- Filters toggle -->
@@ -1694,6 +1695,16 @@ function initMiVenta(){
     var fechaSel=document.getElementById('mv-fecha');
     fechaSel.innerHTML='<option value="">Todas las fechas</option>'+fechas.map(function(f){return '<option>'+f+'</option>';}).join('');
     mvInited=true;
+  }
+  var progEl=document.getElementById('mv-progreso');
+  if(progEl){
+    var objData=getVendorObjData();
+    if(objData.length){
+      var dv=objData[0].dias_venta||0, dr=objData[0].dias_rest||0;
+      var tot=dv+dr;
+      var pct=tot?(dv/tot*100):0;
+      progEl.textContent=dv+' / '+tot+' / '+pct.toFixed(1)+'%';
+    }
   }
   mvApplyFilters();
 }
@@ -3298,6 +3309,13 @@ function initSupervisorApp(){
   document.getElementById('content').style.display='none';
   var supEl=document.getElementById('sup-name');
   if(supEl) supEl.textContent=(SUPERVISOR_NAMES[currentSupervisor]||currentSupervisor||'').toUpperCase()+' — Supervisión';
+  var progEl=document.getElementById('sup-progreso');
+  if(progEl && OBJ_DATA_VENDOR.length){
+    var dv=OBJ_DATA_VENDOR[0].dias_venta||0, dr=OBJ_DATA_VENDOR[0].dias_rest||0;
+    var tot=dv+dr;
+    var pct=tot?(dv/tot*100):0;
+    progEl.textContent=dv+' / '+tot+' / '+pct.toFixed(1)+'%';
+  }
   supSetTab('total');
   initSupCal();
 }
@@ -3307,8 +3325,8 @@ function supSetPage(p){
   supPage = p;
   var objBtn=document.getElementById('sup-page-obj'), ventaBtn=document.getElementById('sup-page-venta');
   var objPage=document.getElementById('sup-objetivos-page'), ventaPage=document.getElementById('sup-venta-page');
-  objBtn.style.background=p==='obj'?'#7b1fa2':'transparent'; objBtn.style.color=p==='obj'?'#fff':'#5f6368';
-  ventaBtn.style.background=p==='venta'?'#7b1fa2':'transparent'; ventaBtn.style.color=p==='venta'?'#fff':'#5f6368';
+  objBtn.style.background=p==='obj'?'#7b1fa2':'#f1f3f4'; objBtn.style.color=p==='obj'?'#fff':'#5f6368'; objBtn.style.borderBottomColor=p==='obj'?'#7b1fa2':'transparent';
+  ventaBtn.style.background=p==='venta'?'#7b1fa2':'#f1f3f4'; ventaBtn.style.color=p==='venta'?'#fff':'#5f6368'; ventaBtn.style.borderBottomColor=p==='venta'?'#7b1fa2':'transparent';
   objPage.style.display=p==='obj'?'flex':'none';
   ventaPage.style.display=p==='venta'?'flex':'none';
   if(p==='venta'){ if(!supMvInited) supMvInit(); else supMvApplyFilters(); }
@@ -3320,6 +3338,7 @@ function supSetPage(p){
 // con filtro de vendedor disponible)
 // ══════════════════════════════════════════════
 var supMvInited=false, supMvView='vendedor', supMvFiltered=[];
+var supMvCartera='';
 var supMvExpandedVendor=null;
 
 function supMvInit(){
@@ -3335,6 +3354,7 @@ function supMvInit(){
   document.getElementById('supmv-canal').innerHTML='<option value="">Todos los canales</option>'+canales.map(function(c){return '<option>'+c+'</option>';}).join('');
   var fechas=[...new Set(rows.map(function(r){return vf(r,'fc');}))].filter(Boolean).sort().reverse();
   document.getElementById('supmv-fecha').innerHTML='<option value="">Todas las fechas</option>'+fechas.map(function(f){return '<option>'+f+'</option>';}).join('');
+  if(fechas.length) document.getElementById('supmv-fecha').value=fechas[0]; // última fecha con ventas por defecto
   supMvInited=true;
   supMvApplyFilters();
 }
@@ -3359,6 +3379,15 @@ function supMvToggleKpis(){
   document.getElementById('supmv-kpis-arrow').textContent = collapsed?'▾ Ocultar':'▸ Mostrar';
 }
 
+function supMvSetCartera(cart){
+  supMvCartera = (supMvCartera===cart) ? '' : cart;
+  var impBtn=document.getElementById('supmv-cart-imp'), plaBtn=document.getElementById('supmv-cart-pla');
+  var impOn=supMvCartera==='Impulso', plaOn=supMvCartera==='Planificado';
+  impBtn.style.background=impOn?'#7b1fa2':'#fff'; impBtn.style.color=impOn?'#fff':'#7b1fa2';
+  plaBtn.style.background=plaOn?'#1565c0':'#fff'; plaBtn.style.color=plaOn?'#fff':'#1565c0';
+  supMvApplyFilters();
+}
+
 function supMvApplyFilters(){
   var vend=document.getElementById('supmv-vendedor').value;
   var rubro=document.getElementById('supmv-rubro').value;
@@ -3372,7 +3401,10 @@ function supMvApplyFilters(){
   if(seg && !document.querySelector('#supmv-segmento option[value="'+seg+'"]')) seg='';
 
   supMvFiltered=VENTA_RAW.r.filter(function(r){
-    return (!vend  || vf(r,'vc')===vend)
+    var vc=vf(r,'vc');
+    var rol=VENDOR_ROL[VENDOR_CODE_TO_NAME[vc]];
+    return (!vend  || vc===vend)
+      && (!supMvCartera || rol===supMvCartera)
       && (!rubro || vf(r,'ru')===rubro)
       && (!seg   || vf(r,'sg')===seg)
       && (!canal || vf(r,'ca')===canal)
@@ -3397,6 +3429,9 @@ function supMvClearFilters(){
   document.getElementById('supmv-canal').value='';
   document.getElementById('supmv-fecha').value='';
   document.getElementById('supmv-cliente').value='';
+  supMvCartera='';
+  document.getElementById('supmv-cart-imp').style.background='#fff'; document.getElementById('supmv-cart-imp').style.color='#7b1fa2';
+  document.getElementById('supmv-cart-pla').style.background='#fff'; document.getElementById('supmv-cart-pla').style.color='#1565c0';
   supMvUpdateSegmentos('');
   document.getElementById('supmv-segmento').value='';
   supMvApplyFilters();
@@ -3985,7 +4020,10 @@ function supRenderHelados(data){
   <!-- Header -->
   <div style="background:#7b1fa2;padding:8px 12px;flex-shrink:0">
     <div style="display:flex;justify-content:space-between;align-items:center">
-      <div id="sup-name" style="color:#fff;font-weight:800;font-size:14px"></div>
+      <div>
+        <div id="sup-name" style="color:#fff;font-weight:800;font-size:14px"></div>
+        <div id="sup-progreso" style="color:#e1bee7;font-size:10.5px;font-weight:700"></div>
+      </div>
       <div style="display:flex;align-items:center;gap:6px">
       <div onclick="document.getElementById('sup-cal').showPicker?document.getElementById('sup-cal').showPicker():document.getElementById('sup-cal').click()"
            style="display:flex;align-items:center;gap:4px;background:#fff2;border:1px solid #fff4;border-radius:8px;padding:4px 9px;cursor:pointer">
@@ -4002,8 +4040,8 @@ function supRenderHelados(data){
   </div>
   <!-- Page toggle -->
   <div style="background:#fff;border-bottom:2px solid #e8eaed;display:flex;flex-shrink:0">
-    <button id="sup-page-obj"   onclick="supSetPage('obj')"   style="flex:1;padding:10px 8px;border:none;background:#7b1fa2;font-weight:700;font-size:12px;cursor:pointer;color:#fff">📊 OBJETIVOS</button>
-    <button id="sup-page-venta" onclick="supSetPage('venta')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;color:#5f6368">💰 VENTA MES</button>
+    <button id="sup-page-obj"   onclick="supSetPage('obj')"   style="flex:1;padding:10px 8px;border:none;border-bottom:3px solid #7b1fa2;background:#7b1fa2;font-weight:700;font-size:12px;cursor:pointer;color:#fff">📊 OBJETIVOS</button>
+    <button id="sup-page-venta" onclick="supSetPage('venta')" style="flex:1;padding:10px 8px;border:none;border-bottom:3px solid transparent;background:#f1f3f4;font-weight:700;font-size:12px;cursor:pointer;color:#5f6368">💰 VENTA MES</button>
   </div>
 
   <!-- OBJETIVOS PAGE -->
@@ -4035,6 +4073,10 @@ function supRenderHelados(data){
     </div>
     <!-- Filters -->
     <div id="supmv-filters-panel" style="background:#fff;border-bottom:1px solid #e8eaed;padding:8px 14px;display:none;gap:8px;flex-shrink:0;flex-wrap:wrap;align-items:center">
+      <div style="display:flex;gap:6px;width:100%">
+        <button id="supmv-cart-imp" onclick="supMvSetCartera('Impulso')" style="flex:1;padding:6px;border-radius:8px;border:2px solid #7b1fa2;background:#fff;color:#7b1fa2;font-weight:700;font-size:11px;cursor:pointer">IMPULSO</button>
+        <button id="supmv-cart-pla" onclick="supMvSetCartera('Planificado')" style="flex:1;padding:6px;border-radius:8px;border:2px solid #1565c0;background:#fff;color:#1565c0;font-weight:700;font-size:11px;cursor:pointer">PLANIFICADO</button>
+      </div>
       <select id="supmv-vendedor" onchange="supMvApplyFilters()" style="font-size:11px;padding:5px 8px;border:1.5px solid #e8eaed;border-radius:8px;flex:1;min-width:140px">
         <option value="">Todos los vendedores</option>
       </select>
