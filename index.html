@@ -120,7 +120,35 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
 </head>
 <body>
 
-<div id="data-loading-overlay" style="position:fixed;inset:0;background:#fff;z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-family:inherit">
+<!-- Firebase SDK (modular). Expone window.fb con lo que necesita el resto de la app. -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, signInWithEmailAndPassword, signOut, getIdTokenResult }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getFirestore, collection, getDocs }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getStorage, ref, getBytes }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBVCgR3-XL6Z6KLTxTjP00e1gntRw2CiKs",
+    authDomain: "ladiar-appvendedores.firebaseapp.com",
+    projectId: "ladiar-appvendedores",
+    storageBucket: "ladiar-appvendedores.firebasestorage.app",
+    messagingSenderId: "778502854783",
+    appId: "1:778502854783:web:380d6cff49f1aac1ef074a"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const storage = getStorage(app);
+
+  window.fb = { auth, db, storage, signInWithEmailAndPassword, signOut, getIdTokenResult, collection, getDocs, ref, getBytes };
+  window.fbReady = true;
+</script>
+
+<div id="data-loading-overlay" style="display:none;position:fixed;inset:0;background:#fff;z-index:10000;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-family:inherit">
   <div class="spinner"></div>
   <div id="data-loading-text" style="font-size:13px;color:#5f6368;text-align:center;padding:0 24px">Cargando datos del modelo…</div>
   <div id="data-loading-error" style="display:none;font-size:12px;color:#c5221f;text-align:center;padding:0 24px;max-width:340px;line-height:1.5"></div>
@@ -493,51 +521,78 @@ function setLoginMode(mode){
   document.getElementById('login-error').style.display='none';
 }
 
-function doLogin(){
+async function doLogin(){
   const errEl = document.getElementById('login-error');
   const isAdmin = document.getElementById('fields-admin').style.display!=='none';
   const isSup = document.getElementById('fields-supervisor').style.display!=='none';
+  errEl.style.display = 'none';
+
+  if(!window.fbReady){
+    errEl.textContent = 'La app todavía está cargando, esperá un segundo e intentá de nuevo.';
+    errEl.style.display = 'block';
+    return;
+  }
+  const { auth, signInWithEmailAndPassword, getIdTokenResult, signOut } = window.fb;
+
+  async function intentarLogin(email, password){
+    try{
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const tokenResult = await getIdTokenResult(cred.user, true);
+      return { ok:true, claims: tokenResult.claims };
+    }catch(err){
+      console.error('[login]', err.code || err.message);
+      return { ok:false };
+    }
+  }
 
   if(isAdmin){
     const user = (document.getElementById('login-admin-user').value||'').trim().toLowerCase();
     const pass = (document.getElementById('login-admin-pass').value||'').trim();
-    if(ADMIN_LOGINS[user] && ADMIN_LOGINS[user]===pass){
-      currentAdmin=user;
+    const res = await intentarLogin(user+'@ladiar.internal', pass);
+    if(res.ok && res.claims.role==='admin'){
+      currentAdmin = res.claims.name || user;
+      const okData = await loadFirebaseData();
+      if(!okData){ await signOut(auth); return; }
       document.getElementById('login-screen').style.display='none';
       initAdminApp();
-      return;
     } else {
+      if(res.ok) await signOut(auth);
       errEl.style.display='block';
       document.getElementById('login-admin-pass').value='';
-      return;
     }
+    return;
   }
 
   if(isSup){
-    const user = (document.getElementById('login-sup-user').value||'').trim().toLowerCase();
+    const user = (document.getElementById('login-sup-user').value||'').trim();
     const pass = (document.getElementById('login-sup-pass').value||'').trim();
-    if(SUPERVISOR_LOGINS[user] && SUPERVISOR_LOGINS[user]===pass){
-      currentSupervisor=user;
+    const res = await intentarLogin('s'+user+'@ladiar.internal', user+pass);
+    if(res.ok && res.claims.role==='supervisor'){
+      currentSupervisor = res.claims.name;
+      const okData = await loadFirebaseData();
+      if(!okData){ await signOut(auth); return; }
       document.getElementById('login-screen').style.display='none';
       initSupervisorApp();
-      return;
     } else {
+      if(res.ok) await signOut(auth);
       errEl.style.display='block';
       document.getElementById('login-sup-pass').value='';
-      return;
     }
+    return;
   }
 
   const code = document.getElementById('login-code').value.trim();
   const pin = document.getElementById('login-pin').value.trim();
+  const res = await intentarLogin('v'+code+'@ladiar.internal', code+pin);
 
-  const match = Object.entries(VENDOR_PINS).find(([vend, info]) => info.code === code && info.pin === pin);
-
-  if(match){
-    currentVendor = match[0];
+  if(res.ok && res.claims.role==='vendedor'){
+    currentVendor = res.claims.name;
+    const okData = await loadFirebaseData();
+    if(!okData){ await signOut(auth); return; }
     document.getElementById('login-screen').style.display = 'none';
     initAppForVendor();
   } else {
+    if(res.ok) await signOut(auth);
     errEl.style.display = 'block';
     document.getElementById('login-pin').value = '';
     const box = document.getElementById('login-box');
@@ -548,6 +603,7 @@ function doLogin(){
 }
 
 function doLogout(){
+  if(window.fbReady && window.fb.auth.currentUser){ window.fb.signOut(window.fb.auth).catch(function(){}); }
   if(currentAdmin){
     currentAdmin=null;
     document.getElementById('admin-app').style.display='none';
@@ -1588,54 +1644,73 @@ var VENTA_PA_RAW = {k:[],r:[]};
 var VENTA_PA_KEYS = VENTA_PA_RAW.k;
 
 // ══════════════════════════════════════════════
-// CARGA DE DATOS EXTERNOS (data/*.json junto a este HTML)
+// CARGA DE DATOS DESDE FIREBASE (Firestore + Storage)
+// Se llama DESPUÉS de loguearse (las reglas de seguridad exigen usuario autenticado).
 // ══════════════════════════════════════════════
-const DATA_FILES = {
-  raw_data: './data/raw_data.json',              // Hoja de ruta (RAW_DATA)
-  obj_vendedores: './data/obj_vendedores.json',   // Objetivos Vendedores
-  obj_helados: './data/obj_helados.json',         // Objetivos Helados
-  venta_vendedores: './data/venta_vendedores.json', // Venta Vendedores
-  venta_pa: './data/venta_pa.json'                // Venta Vendedores PA (por cliente)
-};
-
-async function loadExternalData(){
+async function loadFirebaseData(){
+  const overlay = document.getElementById('data-loading-overlay');
   const textEl = document.getElementById('data-loading-text');
   const errEl = document.getElementById('data-loading-error');
+  overlay.style.display = 'flex';
+  textEl.style.display = 'block';
+  errEl.style.display = 'none';
+  textEl.textContent = 'Cargando datos del modelo…';
+
   try{
-    const entries = Object.entries(DATA_FILES);
-    const results = await Promise.all(entries.map(function([key, url]){
-      return fetch(url).then(function(res){
-        if(!res.ok) throw new Error(key+': HTTP '+res.status+' en '+url);
-        return res.json().catch(function(){ throw new Error(key+': el archivo no es JSON válido ('+url+')'); });
+    const { db, storage, collection, getDocs, ref, getBytes } = window.fb;
+
+    // ── Clientes (hoja de ruta) desde Firestore → se "aplana" de vuelta al
+    // mismo formato de filas que usa el resto de la app (RAW_DATA) ──
+    const snap = await getDocs(collection(db, 'clientes'));
+    const nuevoRawData = [];
+    snap.forEach(function(doc){
+      const c = doc.data();
+      const id = doc.id;
+      (c.visitas||[]).forEach(function(v){
+        nuevoRawData.push({
+          vend:v.vend, rol:v.rol, zona:c.zona, s:v.s, d:v.d, id:id,
+          n:c.nombre, tier:c.tier, canal:c.canal, freq:v.freq,
+          la:c.lat, lo:c.lon, hd:v.hd, hh:v.hh, prob:v.prob, tm:v.tm, orden:v.orden
+        });
       });
-    }));
+    });
+    RAW_DATA = nuevoRawData;
 
-    const data = {};
-    entries.forEach(function(entry, i){ data[entry[0]] = results[i]; });
+    // ── Los 4 archivos grandes desde Storage (latest.json de cada uno) ──
+    async function leerStorageJSON(path){
+      const bytes = await getBytes(ref(storage, path));
+      const texto = new TextDecoder('utf-8').decode(bytes);
+      return JSON.parse(texto);
+    }
 
-    RAW_DATA = data.raw_data || [];
-    OBJ_DATA_VENDOR = data.obj_vendedores || [];
-    OBJ_HELADOS = data.obj_helados || [];
-    OBJ_HELADOS = OBJ_HELADOS.map(function(r){
+    const [objVend, objHelados, ventaVend, ventaPA] = await Promise.all([
+      leerStorageJSON('obj_vendedores/latest.json'),
+      leerStorageJSON('obj_helados/latest.json'),
+      leerStorageJSON('venta_vendedores/latest.json'),
+      leerStorageJSON('venta_pa/latest.json'),
+    ]);
+
+    OBJ_DATA_VENDOR = objVend || [];
+    OBJ_HELADOS = (objHelados || []).map(function(r){
       return Object.assign({}, r, {zona: (r.zona||'').replace(/\s+/g,' ').trim()});
     });
-    VENTA_RAW = data.venta_vendedores || {k:[],r:[]};
+    VENTA_RAW = ventaVend || {k:[],r:[]};
     VENTA_KEYS = VENTA_RAW.k || [];
-    VENTA_PA_RAW = data.venta_pa || {k:[],r:[]};
+    VENTA_PA_RAW = ventaPA || {k:[],r:[]};
     VENTA_PA_KEYS = VENTA_PA_RAW.k || [];
 
-    document.getElementById('data-loading-overlay').style.display = 'none';
+    overlay.style.display = 'none';
+    return true;
   }catch(err){
-    console.error('[loadExternalData]', err);
+    console.error('[loadFirebaseData]', err);
     textEl.style.display = 'none';
     errEl.style.display = 'block';
     errEl.innerHTML = '⚠️ No se pudieron cargar los datos del modelo.<br><br>'
       + (err.message || err)
-      + '<br><br>Este archivo necesita abrirse desde un servidor (por ejemplo GitHub Pages), no haciendo doble clic sobre el HTML. '
-      + 'Verificá también que la carpeta <b>data/</b> con los 5 archivos JSON esté junto a este HTML.';
+      + '<br><br>Revisá tu conexión a internet, o que las reglas de seguridad de Firestore/Storage estén publicadas.';
+    return false;
   }
 }
-loadExternalData();
 
 // K = keys: vc,cl,ru,sg,pr,vp,mg,bn,bu,kg
 var VENTA_KEYS = VENTA_RAW.k;
