@@ -125,7 +125,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getAuth, signInWithEmailAndPassword, signOut, getIdTokenResult }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { getFirestore, collection, getDocs }
+  import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc, writeBatch, getDoc }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   import { getStorage, ref, getBytes }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
@@ -144,7 +144,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
   const db = getFirestore(app);
   const storage = getStorage(app);
 
-  window.fb = { auth, db, storage, signInWithEmailAndPassword, signOut, getIdTokenResult, collection, getDocs, ref, getBytes };
+  window.fb = { auth, db, storage, signInWithEmailAndPassword, signOut, getIdTokenResult, collection, getDocs, ref, getBytes, doc, setDoc, deleteDoc, writeBatch, getDoc };
   window.fbReady = true;
 </script>
 
@@ -1676,6 +1676,16 @@ async function loadFirebaseData(){
     });
     RAW_DATA = nuevoRawData;
 
+    // ── Movimientos manuales guardados (Fase 4) ──
+    try{
+      const { doc, getDoc } = window.fb;
+      const movesSnap = await getDoc(doc(db, 'meta', 'manualMoves'));
+      adminManualMoves = (movesSnap.exists() && movesSnap.data().data) ? movesSnap.data().data : {};
+    }catch(e){
+      console.warn('[loadFirebaseData] no se pudieron cargar manualMoves', e);
+      adminManualMoves = {};
+    }
+
     // ── Los 4 archivos grandes desde Storage (latest.json de cada uno) ──
     async function leerStorageJSON(path){
       const bytes = await getBytes(ref(storage, path));
@@ -2205,6 +2215,56 @@ function initAdminMap(){
 
 // ── ADMIN: reasignación manual de clientes + log de cambios (Fase 2) ──
 var adminManualMoves = {}; // key -> {semana,dia} o {quincenalPattern,dia}
+
+// ══════════════════════════════════════════════
+// PERSISTENCIA EN FIRESTORE (Fase 4)
+// Cada vez que el Admin edita algo, además de mutar RAW_DATA en memoria (como
+// siempre), lo guardamos en Firestore para que sobreviva a un refresh o a que
+// otro admin actualice los datos. Si falla el guardado (sin internet, etc.),
+// avisamos con el toast pero NO revertimos el cambio en memoria — el admin
+// puede seguir trabajando y reintentar guardar más tarde.
+// ══════════════════════════════════════════════
+
+function adminBuildClienteDoc(id){
+  const rows = RAW_DATA.filter(r=>String(r.id)===String(id));
+  if(!rows.length) return null;
+  const first = rows[0];
+  return {
+    nombre: first.n, tier: first.tier, canal: first.canal, zona: first.zona,
+    lat: first.la, lon: first.lo,
+    visitas: rows.map(r=>({vend:r.vend, rol:r.rol, freq:r.freq, s:r.s, d:r.d, orden:r.orden, hd:r.hd, hh:r.hh, prob:r.prob, tm:r.tm}))
+  };
+}
+
+async function adminSaveClienteFirestore(id){
+  if(!window.fbReady) return;
+  try{
+    const { db, doc, setDoc, deleteDoc } = window.fb;
+    const data = adminBuildClienteDoc(id);
+    if(data){
+      await setDoc(doc(db, 'clientes', String(id)), data);
+    } else {
+      // el cliente se quedó sin filas (caso raro) -> lo borramos de Firestore también
+      await deleteDoc(doc(db, 'clientes', String(id)));
+    }
+  }catch(err){
+    console.error('[adminSaveClienteFirestore]', id, err);
+    adminShowToast('⚠️ No se pudo guardar el cliente '+id+' en Firebase (' + (err.message||err) + ')');
+  }
+}
+
+async function adminSaveManualMovesFirestore(){
+  if(!window.fbReady) return;
+  try{
+    const { db, doc, setDoc } = window.fb;
+    await setDoc(doc(db, 'meta', 'manualMoves'), { data: adminManualMoves });
+  }catch(err){
+    console.error('[adminSaveManualMovesFirestore]', err);
+    adminShowToast('⚠️ No se pudieron guardar los movimientos en Firebase (' + (err.message||err) + ')');
+  }
+}
+
+
 var adminClientEditLog = []; // {editId, id, nombre, timestamp, beforeRows, afterRows}
 var adminEditLogCounter = 0;
 
@@ -2230,6 +2290,10 @@ function adminChangeSecuencia(clientKey, newOrdenRaw){
 
   adminShowToast('Secuencia actualizada y reordenada');
   adminBuildRuta();
+
+  // Fase 4: guarda en Firestore a todos los clientes cuyo orden cambió
+  const idsAfectados = [...new Set(sorted.map(p=>String(p.source.id)))];
+  idsAfectados.forEach(id=>adminSaveClienteFirestore(id));
 }
 
 function adminGetClientKey(r){ return `${r.vend}|${r.id}|${r.freq}`; }
@@ -2301,6 +2365,7 @@ function adminMoveClient(key, uid){
   adminManualMoves[key] = move;
   adminBuildRuta();
   adminShowToast('Movido a ' + (move.semana||move.quincenalPattern) + ' · ' + dia);
+  adminSaveManualMovesFirestore();
 }
 
 function adminShowToast(msg){
@@ -2379,6 +2444,7 @@ function adminUndoMove(key){
   delete adminManualMoves[key];
   adminBuildCambiosLog();
   adminBuildRuta();
+  adminSaveManualMovesFirestore();
 }
 
 function adminClearAllMoves(){
@@ -2387,6 +2453,7 @@ function adminClearAllMoves(){
   adminManualMoves = {};
   adminBuildCambiosLog();
   adminBuildRuta();
+  adminSaveManualMovesFirestore();
 }
 
 function adminUndoClientEdit(editId){
@@ -2403,6 +2470,7 @@ function adminUndoClientEdit(editId){
   adminBuildCambiosLog();
   adminBuildRuta();
   if(adminTab==='comparativa') adminBuildComparativa();
+  adminSaveClienteFirestore(entry.id);
 }
 
 function adminClearAllClientEdits(){
@@ -2870,6 +2938,7 @@ function adminSaveClientEdit(){
 
   adminBuildRuta();
   if(adminTab==='comparativa') adminBuildComparativa();
+  adminSaveClienteFirestore(id);
 }
 
 // ── ADMIN: importar Maestro de clientes + Hoja de reparto ──
@@ -3083,7 +3152,7 @@ async function adminProcessImport(){
   }
 }
 
-function adminConfirmImport(){
+async function adminConfirmImport(){
   if(!adminPendingImportRows || !adminPendingImportRows.length) return;
   if(!confirm(`Esto va a reemplazar los ${RAW_DATA.length} registros actuales por ${adminPendingImportRows.length} nuevos. ¿Confirmás?`)) return;
 
@@ -3099,7 +3168,49 @@ function adminConfirmImport(){
   adminBuildRuta();
   if(adminTab==='comparativa') adminBuildComparativa();
   if(adminTab==='cambios') adminBuildCambiosLog();
-  adminShowToast('Datos importados correctamente');
+  adminShowToast('Datos importados — sincronizando con Firebase...');
+
+  await adminSyncAllClientesFirestore();
+  await adminSaveManualMovesFirestore();
+  adminShowToast('Sincronización con Firebase completa');
+}
+
+// Sube TODOS los clientes actuales de RAW_DATA a Firestore, y borra los que ya
+// no existan más (por ejemplo, clientes que se dieron de baja en la importación).
+async function adminSyncAllClientesFirestore(){
+  if(!window.fbReady) return;
+  try{
+    const { db, collection, getDocs, writeBatch, doc } = window.fb;
+
+    const idsActuales = new Set(RAW_DATA.map(r=>String(r.id)));
+
+    const snap = await getDocs(collection(db,'clientes'));
+    const idsEnFirestore = [];
+    snap.forEach(d=>idsEnFirestore.push(d.id));
+    const idsABorrar = idsEnFirestore.filter(id=>!idsActuales.has(id));
+
+    const LOTE = 400;
+    // Borrar los que ya no existen
+    for(let i=0;i<idsABorrar.length;i+=LOTE){
+      const batch = writeBatch(db);
+      idsABorrar.slice(i,i+LOTE).forEach(id=>batch.delete(doc(db,'clientes',id)));
+      await batch.commit();
+    }
+
+    // Subir/actualizar todos los actuales
+    const ids = [...idsActuales];
+    for(let i=0;i<ids.length;i+=LOTE){
+      const batch = writeBatch(db);
+      ids.slice(i,i+LOTE).forEach(id=>{
+        const data = adminBuildClienteDoc(id);
+        if(data) batch.set(doc(db,'clientes',id), data);
+      });
+      await batch.commit();
+    }
+  }catch(err){
+    console.error('[adminSyncAllClientesFirestore]', err);
+    adminShowToast('⚠️ Error sincronizando con Firebase: ' + (err.message||err));
+  }
 }
 
 // ── ADMIN: exportación a ERP (Fase 3) ──
