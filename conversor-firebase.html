@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conversor de datos — APP Vendedores Ladiar (Firebase)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --blue:#1a73e8; --green:#188038; --red:#c5221f; --gray:#5f6368;
+    --bg:#f8f9fa; --border:#e8eaed;
+  }
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;margin:0;background:var(--bg);color:#202124}
+  header{background:#202124;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+  header h1{margin:0;font-size:18px}
+  header p{margin:4px 0 0;font-size:12.5px;color:#bdc1c6}
+  main{max-width:840px;margin:0 auto;padding:20px 16px 60px}
+  .card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:16px}
+  .card h2{font-size:15px;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+  .card .badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:#e8f0fe;color:var(--blue)}
+  .card .badge.eventual{background:#fce8e6;color:var(--red)}
+  .card p.desc{font-size:12px;color:var(--gray);margin:4px 0 14px;line-height:1.5}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px}
+  .field{flex:1;min-width:200px}
+  .field label{display:block;font-size:11px;font-weight:700;color:var(--gray);margin-bottom:4px;text-transform:uppercase}
+  input[type=file],input[type=text],input[type=password]{width:100%;font-size:12.5px;padding:8px;border:1.5px solid var(--border);border-radius:8px;background:#fff}
+  input[type=file]{border-style:dashed;background:var(--bg)}
+  button{padding:9px 16px;border:none;border-radius:8px;background:var(--blue);color:#fff;font-weight:700;font-size:12.5px;cursor:pointer}
+  button:hover{opacity:.92}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  button.secondary{background:var(--green)}
+  .status{margin-top:10px;font-size:12px;border-radius:8px;padding:9px 12px;display:none;white-space:pre-line;line-height:1.5}
+  .status.ok{display:block;background:#e6f4ea;color:var(--green)}
+  .status.err{display:block;background:#fce8e6;color:var(--red)}
+  .status.info{display:block;background:#e8f0fe;color:var(--blue)}
+  table.preview{width:100%;border-collapse:collapse;font-size:11px;margin-top:10px}
+  table.preview th{background:#202124;color:#fff;padding:5px 7px;text-align:left}
+  table.preview td{padding:5px 7px;border-bottom:1px solid var(--border)}
+  table.preview tr:nth-child(even){background:var(--bg)}
+  #login-gate{max-width:360px;margin:60px auto;background:#fff;border:1px solid var(--border);border-radius:12px;padding:24px}
+  #login-gate h2{margin:0 0 4px;font-size:16px}
+  #login-gate p{font-size:12px;color:var(--gray);margin:0 0 16px}
+  #login-gate .field{margin-bottom:12px}
+  #login-error{display:none;background:#fce8e6;color:var(--red);font-size:12px;padding:8px 10px;border-radius:6px;margin-bottom:10px}
+</style>
+</head>
+<body>
+
+<!-- Firebase SDK (modular) -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, signInWithEmailAndPassword, signOut, getIdTokenResult }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc, writeBatch }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getStorage, ref, uploadBytes, listAll, deleteObject }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBVCgR3-XL6Z6KLTxTjP00e1gntRw2CiKs",
+    authDomain: "ladiar-appvendedores.firebaseapp.com",
+    projectId: "ladiar-appvendedores",
+    storageBucket: "ladiar-appvendedores.firebasestorage.app",
+    messagingSenderId: "778502854783",
+    appId: "1:778502854783:web:380d6cff49f1aac1ef074a"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const storage = getStorage(app);
+
+  window.fb = { auth, db, storage, signInWithEmailAndPassword, signOut, getIdTokenResult,
+    collection, getDocs, doc, setDoc, deleteDoc, writeBatch,
+    ref, uploadBytes, listAll, deleteObject };
+  window.fbReady = true;
+</script>
+
+<header>
+  <div>
+    <h1>🔄 Conversor de datos — APP Vendedores Ladiar</h1>
+    <p>Convertí los archivos que bajás de Power BI / ERP y subilos directo a Firebase. Ya no hace falta pasar por GitHub.</p>
+  </div>
+  <div id="header-user" style="display:none">
+    <button onclick="cerrarSesion()" style="background:#5f6368">Salir</button>
+  </div>
+</header>
+
+<!-- Login (solo Admin puede usar esta herramienta) -->
+<div id="login-gate">
+  <h2>🔒 Ingresar como Admin</h2>
+  <p>Esta herramienta escribe datos reales — solo el usuario Admin puede usarla.</p>
+  <div id="login-error"></div>
+  <div class="field">
+    <label>Usuario</label>
+    <input type="text" id="login-user" placeholder="admin" autocomplete="username">
+  </div>
+  <div class="field">
+    <label>Contraseña</label>
+    <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+  </div>
+  <button onclick="doLogin()" style="width:100%">Ingresar</button>
+</div>
+
+<main id="app-main" style="display:none">
+
+  <!-- 1. MAESTRO + HOJA DE REPARTO → colección "clientes" en Firestore -->
+  <div class="card">
+    <h2>📍 Maestro de clientes + Hoja de reparto <span class="badge eventual">eventual</span></h2>
+    <p class="desc">Cruza el Maestro de clientes (ERP) con la Hoja de reparto y sincroniza la colección <b>clientes</b> en Firestore: sube los clientes nuevos/actualizados y borra los que ya no correspondan.</p>
+    <div class="row">
+      <div class="field">
+        <label>Maestro de clientes (.xls)</label>
+        <input type="file" id="f-maestro" accept=".xls,.xlsx,.csv">
+      </div>
+      <div class="field">
+        <label>Hoja de reparto (.xls)</label>
+        <input type="file" id="f-reparto" accept=".xls,.xlsx,.csv">
+      </div>
+      <button onclick="procesarRaw()">Procesar</button>
+    </div>
+    <div id="status-raw" class="status"></div>
+    <button class="secondary" id="dl-raw" style="display:none" onclick="subirClientesFirestore()">☁️ Subir a Firebase</button>
+  </div>
+
+  <!-- 2. OBJETIVOS VENDEDORES → Storage -->
+  <div class="card">
+    <h2>🎯 Objetivos Vendedores <span class="badge">diaria</span></h2>
+    <p class="desc">Sube el archivo de hoy a Storage (<b>obj_vendedores/latest.json</b>) y guarda una copia con fecha en el histórico.</p>
+    <div class="row">
+      <div class="field">
+        <label>Archivo Objetivos Vendedores (.csv)</label>
+        <input type="file" id="f-objvend" accept=".csv,.xls,.xlsx">
+      </div>
+      <button onclick="procesarObjVend()">Procesar</button>
+    </div>
+    <div id="status-objvend" class="status"></div>
+    <button class="secondary" id="dl-objvend" style="display:none" onclick="subirArchivoStorage('obj_vendedores', window._objVendOut, 'status-objvend')">☁️ Subir a Firebase</button>
+  </div>
+
+  <!-- 3. OBJETIVOS HELADOS → Storage -->
+  <div class="card">
+    <h2>🧊 Objetivos Helados <span class="badge">diaria</span></h2>
+    <p class="desc">Sube el archivo de hoy a Storage (<b>obj_helados/latest.json</b>) y guarda una copia con fecha en el histórico.</p>
+    <div class="row">
+      <div class="field">
+        <label>Archivo Objetivos Helados (.csv)</label>
+        <input type="file" id="f-helados" accept=".csv,.xls,.xlsx">
+      </div>
+      <button onclick="procesarHelados()">Procesar</button>
+    </div>
+    <div id="status-helados" class="status"></div>
+    <div id="preview-helados"></div>
+    <button class="secondary" id="dl-helados" style="display:none" onclick="subirArchivoStorage('obj_helados', window._heladosOut, 'status-helados')">☁️ Subir a Firebase</button>
+  </div>
+
+  <!-- 4. VENTA VENDEDORES → Storage -->
+  <div class="card">
+    <h2>💰 Venta Vendedores <span class="badge">diaria</span></h2>
+    <p class="desc">Sube el archivo de hoy a Storage (<b>venta_vendedores/latest.json</b>) y guarda una copia con fecha en el histórico.</p>
+    <div class="row">
+      <div class="field">
+        <label>Archivo Venta Vendedores (.csv)</label>
+        <input type="file" id="f-venta" accept=".csv,.xls,.xlsx">
+      </div>
+      <button onclick="procesarVenta()">Procesar</button>
+    </div>
+    <div id="status-venta" class="status"></div>
+    <button class="secondary" id="dl-venta" style="display:none" onclick="subirArchivoStorage('venta_vendedores', window._ventaOut, 'status-venta')">☁️ Subir a Firebase</button>
+  </div>
+
+  <!-- 5. VENTA VENDEDORES PA → Storage -->
+  <div class="card">
+    <h2>📊 Venta Vendedores PA <span class="badge eventual">eventual</span></h2>
+    <p class="desc">Sube el archivo a Storage (<b>venta_pa/latest.json</b>) y guarda una copia con fecha en el histórico.</p>
+    <div class="row">
+      <div class="field">
+        <label>Archivo Venta Vendedores PA (.csv)</label>
+        <input type="file" id="f-pa" accept=".csv,.xls,.xlsx">
+      </div>
+      <button onclick="procesarPA()">Procesar</button>
+    </div>
+    <div id="status-pa" class="status"></div>
+    <button class="secondary" id="dl-pa" style="display:none" onclick="subirArchivoStorage('venta_pa', window._paOut, 'status-pa')">☁️ Subir a Firebase</button>
+  </div>
+
+</main>
+
+<script>
+// ══════════════════════════════════════════════
+// LOGIN (mismo esquema que la app: usuario -> admin@ladiar.internal)
+// ══════════════════════════════════════════════
+async function doLogin(){
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  if(!window.fbReady){ errEl.textContent='La página todavía está cargando, esperá un segundo.'; errEl.style.display='block'; return; }
+
+  const user = (document.getElementById('login-user').value||'').trim().toLowerCase();
+  const pass = (document.getElementById('login-pass').value||'').trim();
+  const { auth, signInWithEmailAndPassword } = window.fb;
+
+  try{
+    const cred = await signInWithEmailAndPassword(auth, user+'@ladiar.internal', pass);
+    const tokenResult = await window.fb.getIdTokenResult(cred.user, true);
+    if(tokenResult.claims.role !== 'admin'){
+      await window.fb.signOut(auth);
+      errEl.textContent = 'Este usuario no tiene permisos de Admin.';
+      errEl.style.display = 'block';
+      return;
+    }
+    document.getElementById('login-gate').style.display = 'none';
+    document.getElementById('app-main').style.display = 'block';
+    document.getElementById('header-user').style.display = 'block';
+  }catch(err){
+    console.error('[login]', err);
+    errEl.textContent = 'Usuario o contraseña incorrectos.';
+    errEl.style.display = 'block';
+  }
+}
+
+async function cerrarSesion(){
+  if(window.fbReady) await window.fb.signOut(window.fb.auth);
+  document.getElementById('login-gate').style.display = 'block';
+  document.getElementById('app-main').style.display = 'none';
+  document.getElementById('header-user').style.display = 'none';
+  document.getElementById('login-pass').value = '';
+}
+
+// ══════════════════════════════════════════════
+// UTILIDADES COMPARTIDAS (parseo — igual que antes)
+// ══════════════════════════════════════════════
+function pm(s){
+  if(s===null||s===undefined||s==='') return 0;
+  s = String(s);
+  var neg = s.includes('(');
+  var v = parseFloat(s.replace(/[$(),\s]/g,''));
+  return isNaN(v) ? 0 : (neg ? -v : v);
+}
+function pp(s){
+  if(s===null||s===undefined||s==='') return 0;
+  var v = parseFloat(String(s).replace('%','').replace(/[()]/g,'').trim());
+  if(isNaN(v) || !isFinite(v) || Math.abs(v) > 200) return 0;
+  return v;
+}
+function ci(header, name){
+  var lname = String(name).toLowerCase();
+  var exact = header.findIndex(function(h){ return String(h).trim().toLowerCase() === lname; });
+  if(exact >= 0) return exact;
+  return header.findIndex(function(h){ return String(h).toLowerCase().includes(lname); });
+}
+function readFileAsArrayBuffer(file){
+  return new Promise(function(res, rej){
+    var r = new FileReader();
+    r.onload = function(e){ res(e.target.result); };
+    r.onerror = function(){ rej(new Error('No se pudo leer el archivo')); };
+    r.readAsArrayBuffer(file);
+  });
+}
+function showStatus(id, cls, msg){
+  var el = document.getElementById(id);
+  el.className = 'status ' + cls;
+  el.textContent = msg;
+}
+
+async function smartReadTabular(file){
+  var buf = await readFileAsArrayBuffer(file);
+  var bytes = new Uint8Array(buf.slice(0, 4));
+  var isOle = bytes[0]===0xD0 && bytes[1]===0xCF && bytes[2]===0x11 && bytes[3]===0xE0;
+  var isZip = bytes[0]===0x50 && bytes[1]===0x4B;
+
+  if(isOle || isZip){
+    var wb = XLSX.read(buf, {type:'array'});
+    var ws = wb.Sheets[wb.SheetNames[0]];
+    var aoa = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:null});
+    var header = (aoa[0]||[]).map(function(h){ return String(h==null?'':h).trim(); });
+    var rows = aoa.slice(1).map(function(r){ return r.map(function(c){ return c==null?'':c; }); });
+    return {header: header, rows: rows};
+  }
+
+  var text = new TextDecoder('utf-8').decode(buf);
+  var lines = text.split(/\r?\n/).filter(function(l){ return l.trim()!==''; });
+  if(!lines.length) return {header:[], rows:[]};
+  var firstLine = lines[0];
+  var delim = firstLine.split('\t').length > firstLine.split(',').length ? '\t' : ',';
+  var header = lines[0].replace(/^\uFEFF/,'').split(delim).map(function(h){ return h.trim().replace(/"/g,''); });
+  var rows = lines.slice(1).map(function(line){
+    return line.split(delim).map(function(x){ return x.trim().replace(/^"|"$/g,''); });
+  });
+  return {header: header, rows: rows};
+}
+
+// ══════════════════════════════════════════════
+// SUBIDA A FIREBASE
+// ══════════════════════════════════════════════
+
+// Sube los 4 archivos "grandes" a Storage: latest.json + copia con fecha en historico/,
+// y de paso borra del histórico lo que tenga más de 60 días (2 meses máximo).
+async function subirArchivoStorage(coleccion, data, statusId){
+  if(!data){ showStatus(statusId,'err','Procesá el archivo primero.'); return; }
+  showStatus(statusId,'info','Subiendo a Firebase...');
+  try{
+    const { storage, ref, uploadBytes } = window.fb;
+    const hoy = new Date().toISOString().slice(0,10);
+    const contenido = new Blob([JSON.stringify(data)], {type:'application/json'});
+
+    await uploadBytes(ref(storage, coleccion+'/latest.json'), contenido);
+    await uploadBytes(ref(storage, coleccion+'/historico/'+hoy+'.json'), contenido);
+    const borrados = await limpiarHistoricoViejo(coleccion);
+
+    showStatus(statusId,'ok','✓ Subido a Firebase: '+coleccion+'/latest.json + histórico/'+hoy+'.json'
+      + (borrados ? ('\n🧹 Se borraron '+borrados+' archivos de histórico con más de 60 días.') : ''));
+  }catch(err){
+    console.error(err);
+    showStatus(statusId,'err','Error al subir: '+err.message);
+  }
+}
+
+// Borra del histórico de una colección los archivos de más de 60 días (2 meses máx.)
+// Regla de retención: se conserva desde el 1° del mes que empezó DOS meses antes del
+// actual, en adelante. Ejemplo: si hoy es julio, se conserva mayo completo + junio
+// completo + julio en curso, y se borra abril y anterior. Así nunca queda un mes
+// "partido a la mitad" como pasaría con una ventana fija de X días corridos.
+async function limpiarHistoricoViejo(coleccion){
+  const { storage, ref, listAll, deleteObject } = window.fb;
+  const listado = await listAll(ref(storage, coleccion+'/historico/'));
+  const hoy = new Date();
+  const limite = new Date(hoy.getFullYear(), hoy.getMonth()-2, 1); // 1° del mes, 2 meses atrás
+  let borrados = 0;
+  for(const item of listado.items){
+    const m = item.name.match(/(\d{4}-\d{2}-\d{2})\.json$/);
+    if(m){
+      const fecha = new Date(m[1]+'T00:00:00');
+      if(fecha < limite){
+        await deleteObject(item);
+        borrados++;
+      }
+    }
+  }
+  return borrados;
+}
+
+// Sincroniza la colección "clientes" en Firestore con las filas procesadas del
+// Maestro + Hoja de reparto: sube todos los clientes nuevos/actualizados, y borra
+// los que ya no aparecen en el archivo nuevo.
+async function subirClientesFirestore(){
+  const rows = window._rawDataOut;
+  if(!rows || !rows.length){ showStatus('status-raw','err','Procesá los archivos primero.'); return; }
+  showStatus('status-raw','info','Sincronizando con Firestore (puede tardar unos segundos)...');
+
+  try{
+    const { db, collection, getDocs, doc, setDoc, deleteDoc, writeBatch } = window.fb;
+
+    const porCliente = {};
+    rows.forEach(function(r){
+      if(!porCliente[r.id]){
+        porCliente[r.id] = { nombre:r.n, tier:r.tier, canal:r.canal, zona:r.zona, lat:r.la, lon:r.lo, visitas:[] };
+      }
+      porCliente[r.id].visitas.push({ vend:r.vend, rol:r.rol, freq:r.freq, s:r.s, d:r.d, orden:r.orden, hd:r.hd, hh:r.hh, prob:r.prob, tm:r.tm });
+    });
+
+    const idsNuevos = new Set(Object.keys(porCliente));
+
+    const snap = await getDocs(collection(db,'clientes'));
+    const idsViejos = [];
+    snap.forEach(function(d){ idsViejos.push(d.id); });
+    const idsABorrar = idsViejos.filter(function(id){ return !idsNuevos.has(id); });
+
+    const LOTE = 400;
+    const ids = Object.keys(porCliente);
+
+    for(let i=0;i<ids.length;i+=LOTE){
+      const batch = writeBatch(db);
+      ids.slice(i,i+LOTE).forEach(function(id){ batch.set(doc(db,'clientes',id), porCliente[id]); });
+      await batch.commit();
+      showStatus('status-raw','info','Subiendo clientes '+Math.min(i+LOTE,ids.length)+' de '+ids.length+'...');
+    }
+
+    for(let i=0;i<idsABorrar.length;i+=LOTE){
+      const batch = writeBatch(db);
+      idsABorrar.slice(i,i+LOTE).forEach(function(id){ batch.delete(doc(db,'clientes',id)); });
+      await batch.commit();
+    }
+
+    showStatus('status-raw','ok','✓ Sincronizado con Firestore: '+ids.length+' clientes subidos/actualizados, '+idsABorrar.length+' borrados (ya no estaban en el archivo nuevo).');
+  }catch(err){
+    console.error(err);
+    showStatus('status-raw','err','Error al sincronizar: '+err.message);
+  }
+}
+
+// ══════════════════════════════════════════════
+// 1. MAESTRO + HOJA DE REPARTO → procesa filas (igual que antes)
+// ══════════════════════════════════════════════
+const VENDOR_CODES = {
+  'VILCA':'113','GONZALEZ':'084','MENNA':'127','ANDINO':'116','JIMENEZ':'119','DIAZ':'121',
+  'LABONIA':'079','IBALO':'080','NUÑEZ':'124','OJEDA':'133','BARREÑA':'136','CARABAJAL':'137',
+  'ALVAREZ':'139','HECKLEIN':'140'
+};
+const VENDOR_CODE_TO_NAME = Object.fromEntries(Object.entries(VENDOR_CODES).map(function(e){ return [e[1], e[0]]; }));
+const VENDOR_ROL = {
+  'VILCA':'Planificado','GONZALEZ':'Planificado','MENNA':'Impulso','ANDINO':'Impulso',
+  'JIMENEZ':'Impulso','DIAZ':'Impulso','LABONIA':'Impulso','IBALO':'Planificado',
+  'NUÑEZ':'Planificado','OJEDA':'Impulso','BARREÑA':'Impulso','CARABAJAL':'Planificado',
+  'ALVAREZ':'Planificado','HECKLEIN':'Planificado'
+};
+const FREQ_CODE_TO_NAME = {'1':'semanal','2':'quincenal','4':'mensual'};
+const CATEGORIA_TO_TIER = {'A':'New Ponderate','B1':'N3 ALTO','B2':'N3 BAJO','C':'N4 ALTO','D':'N4 BAJO'};
+const ZONA_MAESTRO_TO_CORTA = {
+  'SAN MIGUEL CENTRO':'103 - SAN MIGUEL CENTRO',
+  'JOSE C PAZ NORTE':'106 - JOSE C PAZ NORTE',
+  'BELLA VISTA':'109 - BELLA VISTA',
+  'JOSE C PAZ CENTRO':'104 - JOSE C PAZ CENTRO',
+  'JOSE C PAZ SUROESTE':'105+107 - JCP SUR-OESTE',
+  'AUTOSERVICIOS 1':'101 - AUTOSERVICIOS 1',
+  'AUTOSERVICIOS 2':'102 - AUTOSERVICIOS 2'
+};
+const SEMANAS_G = ['Semana 1','Semana 2','Semana 3','Semana 4'];
+
+async function procesarRaw(){
+  var fMaestro = document.getElementById('f-maestro').files[0];
+  var fReparto = document.getElementById('f-reparto').files[0];
+  document.getElementById('dl-raw').style.display = 'none';
+  if(!fMaestro || !fReparto){
+    showStatus('status-raw', 'err', 'Subí los dos archivos: Maestro de clientes y Hoja de reparto.');
+    return;
+  }
+  showStatus('status-raw', 'info', 'Procesando...');
+
+  try{
+    var m = await smartReadTabular(fMaestro);
+    var h = m.header;
+    var iCodigo = ci(h,'Código'), iNombre = ci(h,'Nombre'), iCategoria = ci(h,'Categoría'),
+        iCanal = ci(h,'Canal'), iZona = ci(h,'Zona de Ventas'), iLat = ci(h,'Lat.'),
+        iLon = ci(h,'Long.');
+
+    var maestro = new Map();
+    m.rows.forEach(function(row){
+      if(row[iCodigo]===null || row[iCodigo]==='' || row[iCodigo]===undefined) return;
+      var codigo = String(parseInt(row[iCodigo])).trim();
+      var catRaw = String(row[iCategoria]||'').replace(/CLIENTE/i,'').trim().toUpperCase();
+      var tier = CATEGORIA_TO_TIER[catRaw] || null;
+      var zonaRaw = String(row[iZona]||'').trim().replace(/\s+/g,' ');
+      var zonaCorta = ZONA_MAESTRO_TO_CORTA[zonaRaw] || null;
+      var lat = parseFloat(row[iLat]), lon = parseFloat(row[iLon]);
+      maestro.set(codigo, {
+        nombre: String(row[iNombre]||'').trim(), tier: tier, canal: String(row[iCanal]||'').trim(),
+        zonaCorta: zonaCorta, lat: isNaN(lat)?null:lat, lon: isNaN(lon)?null:lon
+      });
+    });
+
+    var r = await smartReadTabular(fReparto);
+    var rh = r.header;
+    var rCliente = ci(rh,'Cliente'), rVende = ci(rh,'Vende'), rFrecVta = ci(rh,'Frec. Vta');
+    var mCount = 0;
+    var dayColIdx = {};
+    rh.forEach(function(col, idx){
+      if(col==='L') dayColIdx['Lunes']=idx;
+      else if(col==='M'){ mCount++; dayColIdx[mCount===1?'Martes':'Miércoles']=idx; }
+      else if(col==='J') dayColIdx['Jueves']=idx;
+      else if(col==='V') dayColIdx['Viernes']=idx;
+      else if(col==='S') dayColIdx['Sábado']=idx;
+    });
+
+    var newRows = [];
+    var stats = {actualizados:0, nuevos:0, sinDatos:0, zonaNoReconocida:0, vendedorDesconocido:0};
+
+    r.rows.forEach(function(row){
+      if(row[rCliente]===null || row[rCliente]==='' || row[rCliente]===undefined) return;
+      var id = String(parseInt(row[rCliente])||row[rCliente]).trim();
+      var vendCode = String(row[rVende]||'').trim();
+      var vendName = VENDOR_CODE_TO_NAME[vendCode];
+      if(!vendName){ stats.vendedorDesconocido++; return; }
+
+      var freqCode = String(row[rFrecVta]||'').trim();
+      var freq = FREQ_CODE_TO_NAME[freqCode] || 'semanal';
+
+      var info = maestro.get(id);
+      if(!info){ stats.sinDatos++; return; }
+      var nombre = info.nombre, tier = info.tier, canal = info.canal, zona = info.zonaCorta,
+          lat = info.lat, lon = info.lon;
+
+      if(!zona){ stats.zonaNoReconocida++; return; }
+      if(lat==null || lon==null || !nombre || !tier){ stats.sinDatos++; return; }
+
+      var targetSemanas = freq==='semanal' ? SEMANAS_G.slice()
+        : freq==='quincenal' ? ['Semana 1','Semana 3']
+        : ['Semana 1'];
+
+      var huboVisita = false;
+      Object.keys(dayColIdx).forEach(function(dia){
+        var colI = dayColIdx[dia];
+        var val = row[colI];
+        if(val===null || val==='' || val===undefined) return;
+        var orden = parseInt(val)||1;
+        huboVisita = true;
+        targetSemanas.forEach(function(s){
+          newRows.push({
+            vend:vendName, rol:(VENDOR_ROL[vendName]||'Impulso'), zona:zona, s:s, d:dia, id:id, n:nombre,
+            tier:tier, canal:canal, freq:freq, la:lat, lo:lon,
+            hd:'07:00', hh:'18:00', prob:0.7, tm:5, orden:orden
+          });
+        });
+      });
+      if(huboVisita) stats.actualizados++;
+    });
+
+    window._rawDataOut = newRows;
+    showStatus('status-raw', 'ok',
+      '✓ Listo: '+newRows.length+' filas generadas.\n'+
+      '• Clientes con visita: '+stats.actualizados+'\n'+
+      (stats.zonaNoReconocida?'• Zona no reconocida (omitidos): '+stats.zonaNoReconocida+'\n':'')+
+      (stats.sinDatos?'• Sin datos suficientes en el maestro (omitidos): '+stats.sinDatos+'\n':'')+
+      (stats.vendedorDesconocido?'• Vendedor no reconocido (omitidos): '+stats.vendedorDesconocido+'\n':'')+
+      '\nRevisá el número y tocá "Subir a Firebase".');
+    document.getElementById('dl-raw').style.display = 'inline-block';
+  }catch(err){
+    console.error(err);
+    showStatus('status-raw', 'err', 'Error: '+err.message);
+  }
+}
+
+// ══════════════════════════════════════════════
+// 2. OBJETIVOS VENDEDORES
+// ══════════════════════════════════════════════
+async function procesarObjVend(){
+  var file = document.getElementById('f-objvend').files[0];
+  document.getElementById('dl-objvend').style.display = 'none';
+  if(!file){ showStatus('status-objvend','err','Subí el archivo de Objetivos Vendedores.'); return; }
+  showStatus('status-objvend','info','Procesando...');
+
+  try{
+    var t = await smartReadTabular(file);
+    var h = t.header;
+    var iSup=ci(h,'zona de ventas'), iZona=ci(h,'vendedores hoy'), iCart=ci(h,'cartera'), iRub=ci(h,'objetivos rubro');
+    var iObjP=ci(h,'objetivo'), iVtaP=ci(h,'ventas acumulada mes'), iPctP=ci(h,'% acumulado');
+    var iPrP=ci(h,'venta proyectada mes'), iPrPctP=ci(h,'proyectado $$'), iDifP=ci(h,'objetivo dif $');
+    var iVdiaP=ci(h,'venta x día objetivo'), iVudP=ci(h,'venta $$ ud');
+    var iObjKg=ci(h,'objetivo v. kg'), iVtaKg=ci(h,'ventas acumulada kg'), iPctKg=ci(h,'% acumulado kg');
+    var iPrKg=ci(h,'venta proyectada mes kg'), iPrPctKg=ci(h,'dif proyectado kg'), iDifKg=ci(h,'objetivo dif kg');
+    var iVdiaKg=ci(h,'venta x día objetivo kg');
+    var iDiasV=ci(h,'sales days'), iDiasR=ci(h,'dias restantes'), iUltDia=ci(h,'ultimo');
+
+    var out = t.rows.map(function(c){
+      return {
+        supervisor: c[iSup]||'', zona: String(c[iZona]||'').replace(/\s+/g,' ').trim(),
+        cartera: c[iCart]||'', rubro: String(c[iRub]||'').replace(/\s+/g,' ').trim(),
+        obj_p: pm(c[iObjP]), vta_p: pm(c[iVtaP]), pct_p: pp(c[iPctP]),
+        proy_p: pm(c[iPrP]), proy_pct_p: pp(c[iPrPctP]), dif_p: pm(c[iDifP]),
+        vdia_p: (iVdiaP>=0?pm(c[iVdiaP]):0), vud_p: (iVudP>=0?pm(c[iVudP]):0),
+        obj_kg: parseFloat(c[iObjKg])||0, vta_kg: parseFloat(c[iVtaKg])||0, pct_kg: pp(c[iPctKg]),
+        proy_kg: parseFloat(c[iPrKg])||0, proy_pct_kg: pp(c[iPrPctKg]), dif_kg: parseFloat(c[iDifKg])||0,
+        vdia_kg: (iVdiaKg>=0?parseFloat(c[iVdiaKg])||0:0),
+        dias_venta: parseInt(c[iDiasV])||0, dias_rest: parseInt(c[iDiasR])||0,
+        ultimo_dia: String(c[iUltDia]||'').slice(0,10)
+      };
+    }).filter(function(r){ return r.zona; });
+
+    window._objVendOut = out;
+    showStatus('status-objvend','ok','✓ '+out.length+' registros generados. Tocá "Subir a Firebase".');
+    document.getElementById('dl-objvend').style.display = 'inline-block';
+  }catch(err){
+    console.error(err);
+    showStatus('status-objvend','err','Error: '+err.message);
+  }
+}
+
+// ══════════════════════════════════════════════
+// 3. OBJETIVOS HELADOS
+// ══════════════════════════════════════════════
+async function procesarHelados(){
+  var file = document.getElementById('f-helados').files[0];
+  document.getElementById('dl-helados').style.display = 'none';
+  document.getElementById('preview-helados').innerHTML = '';
+  if(!file){ showStatus('status-helados','err','Subí el archivo de Objetivos Helados.'); return; }
+  showStatus('status-helados','info','Procesando...');
+
+  try{
+    var t = await smartReadTabular(file);
+    var h = t.header;
+    var iZona=ci(h,'Vendedores Hoy'), iFreezer=ci(h,'Freezer');
+    var iHObj=ci(h,'Obj Venta Helado Hogar'), iHVta=ci(h,'Ventas Hogar'), iHPct=ci(h,'Avance Hogar');
+    var iHProy=ci(h,'Venta Proyectada Hogar'), iHProyPct=ci(h,'Proyectado Hogar'), iHDif=ci(h,'Dif Objetivo Proyectado Hogar');
+    var iHXFrz=ci(h,'Faltante x Freezer Hogar');
+    var iIObj=ci(h,'Obj Venta Helado Impulso'), iIVta=ci(h,'Ventas Impulso'), iIPct=ci(h,'Avance Impulso');
+    var iIProyPct=ci(h,'Proyectado Impulso'), iIXFrz=ci(h,'Faltante x Freezer Impulso');
+
+    var out = t.rows.map(function(c){
+      return {
+        zona: String(c[iZona]||'').replace(/\s+/g,' ').trim(),
+        freezer: parseInt(c[iFreezer])||0,
+        h_obj: pm(c[iHObj]), h_vta: pm(c[iHVta]), h_pct: pp(c[iHPct]),
+        h_proy: pm(c[iHProy]), h_proy_pct: pp(c[iHProyPct]), h_dif: pm(c[iHDif]),
+        h_x_frz: pm(c[iHXFrz]),
+        i_obj: pm(c[iIObj]), i_vta: pm(c[iIVta]), i_pct: pp(c[iIPct]),
+        i_proy_pct: pp(c[iIProyPct]), i_x_frz: pm(c[iIXFrz])
+      };
+    }).filter(function(r){ return r.zona; });
+
+    window._heladosOut = out;
+
+    var preview = '<table class="preview"><thead><tr><th>Zona</th><th>Freezers</th><th>H.Obj</th><th>H.Vta</th><th>I.Obj</th><th>I.Vta</th></tr></thead><tbody>';
+    out.slice(0,8).forEach(function(r){
+      preview += '<tr><td>'+r.zona+'</td><td>'+r.freezer+'</td><td>'+r.h_obj+'</td><td>'+r.h_vta+'</td><td>'+r.i_obj+'</td><td>'+r.i_vta+'</td></tr>';
+    });
+    preview += '</tbody></table>';
+    document.getElementById('preview-helados').innerHTML = preview;
+
+    showStatus('status-helados','ok','✓ '+out.length+' zonas procesadas. Revisá la previsualización y tocá "Subir a Firebase".');
+    document.getElementById('dl-helados').style.display = 'inline-block';
+  }catch(err){
+    console.error(err);
+    showStatus('status-helados','err','Error: '+err.message);
+  }
+}
+
+// ══════════════════════════════════════════════
+// 4. VENTA VENDEDORES
+// ══════════════════════════════════════════════
+async function procesarVenta(){
+  var file = document.getElementById('f-venta').files[0];
+  document.getElementById('dl-venta').style.display = 'none';
+  if(!file){ showStatus('status-venta','err','Subí el archivo de Venta Vendedores.'); return; }
+  showStatus('status-venta','info','Procesando...');
+
+  try{
+    var t = await smartReadTabular(file);
+    var h = t.header;
+    var iVend=ci(h,'vendedor'), iCli=ci(h,'cliente'), iRub=ci(h,'rubro'), iSeg=ci(h,'segmento');
+    var iVP=ci(h,'venta $$'), iMG=ci(h,'margen'), iBN=ci(h,'Bonificación');
+    var iBU=ci(h,'venta bu'), iKG=ci(h,'venta kg'), iCanal=ci(h,'canal'), iTK=ci(h,'venta tokin');
+    var iPV=ci(h,'producto vendidos'), iFC=ci(h,'última fecha');
+
+    var rows = t.rows.map(function(c){
+      var vend = String(c[iVend]||'').trim();
+      var code = vend.slice(0,3);
+      return [code,
+        (iCanal>=0?String(c[iCanal]||'').trim():''),
+        String(c[iCli]||'').trim(), String(c[iRub]||'').trim(), String(c[iSeg]||'').trim(),
+        pm(c[iVP]), pp(c[iMG]), pp(c[iBN]),
+        parseFloat(c[iBU])||0, parseFloat(c[iKG])||0,
+        (iTK>=0?pm(c[iTK]):0), parseFloat(c[iPV])||0,
+        (iFC>=0?String(c[iFC]||'').trim().slice(0,10):'')];
+    }).filter(function(r){ return r[0]; });
+
+    window._ventaOut = {k:['vc','ca','cl','ru','sg','vp','mg','bn','bu','kg','tk','pv','fc'], r: rows};
+    showStatus('status-venta','ok','✓ '+rows.length+' líneas generadas. Tocá "Subir a Firebase".');
+    document.getElementById('dl-venta').style.display = 'inline-block';
+  }catch(err){
+    console.error(err);
+    showStatus('status-venta','err','Error: '+err.message);
+  }
+}
+
+// ══════════════════════════════════════════════
+// 5. VENTA VENDEDORES PA
+// ══════════════════════════════════════════════
+async function procesarPA(){
+  var file = document.getElementById('f-pa').files[0];
+  document.getElementById('dl-pa').style.display = 'none';
+  if(!file){ showStatus('status-pa','err','Subí el archivo de Venta Vendedores PA.'); return; }
+  showStatus('status-pa','info','Procesando...');
+
+  try{
+    var t = await smartReadTabular(file);
+    var h = t.header;
+    var iCli=ci(h,'cliente'), iRub=ci(h,'rubro'), iSeg=ci(h,'segmento');
+    var iVP=ci(h,'venta $$'), iKG=ci(h,'venta kg'), iCanal=ci(h,'canal');
+
+    var rows = t.rows.map(function(c){
+      return [
+        String(c[iCli]||'').trim(), String(c[iRub]||'').trim(), String(c[iSeg]||'').trim(),
+        (iCanal>=0?String(c[iCanal]||'').trim():''),
+        pm(c[iVP]), parseFloat(c[iKG])||0];
+    }).filter(function(r){ return r[0]; });
+
+    window._paOut = {k:['cl','ru','sg','ca','vp','kg'], r: rows};
+    showStatus('status-pa','ok','✓ '+rows.length+' líneas generadas. Tocá "Subir a Firebase".');
+    document.getElementById('dl-pa').style.display = 'inline-block';
+  }catch(err){
+    console.error(err);
+    showStatus('status-pa','err','Error: '+err.message);
+  }
+}
+</script>
+</body>
+</html>
