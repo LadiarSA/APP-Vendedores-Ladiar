@@ -1822,7 +1822,26 @@ function mvGetRutaHoyCodigos(){
   return new Set(rows.map(function(r){ return String(r.id); }));
 }
 
-function mvApplyFilters(){
+var mvDiaCache = {}; // fecha -> {k,r} ya descargado una vez, para no repetir el fetch
+
+// Cuando se filtra por una fecha puntual, el acumulado del mes (VENTA_RAW) NO sirve:
+// cada fila ahí ya es la suma de TODOS los días en que se vendió ese producto/cliente/
+// vendedor, no solo la de ese día. Para ver un día específico hay que traer el archivo
+// de ESE día (venta_vendedores/dias/{fecha}.json), que es la venta real de esa jornada.
+async function mvCargarDiaSiHaceFalta(fecha){
+  if(!fecha || mvDiaCache[fecha]) return;
+  try{
+    const { storage, ref, getBytes } = window.fb;
+    const bytes = await getBytes(ref(storage, 'venta_vendedores/dias/'+fecha+'.json'));
+    const texto = new TextDecoder('utf-8').decode(bytes);
+    mvDiaCache[fecha] = JSON.parse(texto);
+  }catch(err){
+    console.error('[mvCargarDiaSiHaceFalta]', fecha, err);
+    mvDiaCache[fecha] = {k:[],r:[]}; // marca como "sin datos" para no reintentar en loop
+  }
+}
+
+async function mvApplyFilters(){
   var code=getVendorCode();
   var rubro=document.getElementById('mv-rubro').value;
   var seg  =document.getElementById('mv-segmento').value;
@@ -1836,14 +1855,24 @@ function mvApplyFilters(){
   mvUpdateSegmentos(rubro);
   if(seg && !document.querySelector('#mv-segmento option[value="'+seg+'"]')) seg='';
 
+  var baseRows;
+  if(fecha){
+    if(!mvDiaCache[fecha]){
+      document.getElementById('mv-main').innerHTML = '<div style="text-align:center;padding:30px;color:#80868b">Cargando datos del día '+fecha+'...</div>';
+      await mvCargarDiaSiHaceFalta(fecha);
+    }
+    baseRows = (mvDiaCache[fecha] && mvDiaCache[fecha].r) || [];
+  } else {
+    baseRows = VENTA_RAW.r;
+  }
+
   var rutaHoyCodigos = rutaHoy ? mvGetRutaHoyCodigos() : null;
 
-  mvFiltered=VENTA_RAW.r.filter(function(r){
+  mvFiltered=baseRows.filter(function(r){
     return vf(r,'vc')===code
       && (!rubro || vf(r,'ru')===rubro)
       && (!seg   || vf(r,'sg')===seg)
       && (!canal || vf(r,'ca')===canal)
-      && (!fecha || vf(r,'fc')===fecha)
       && (!cli   || vf(r,'cl').toLowerCase().indexOf(cli)!==-1)
       && (!rutaHoyCodigos || rutaHoyCodigos.has(mvClienteCodigo(vf(r,'cl'))))
       && (mvMetric!=='tokin' || vf(r,'tk')>0);
