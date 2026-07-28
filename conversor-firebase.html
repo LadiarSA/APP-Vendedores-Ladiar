@@ -54,7 +54,7 @@
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc, writeBatch }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-  import { getStorage, ref, uploadBytes, listAll, deleteObject }
+  import { getStorage, ref, uploadBytes, listAll, deleteObject, getBytes }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
   const firebaseConfig = {
@@ -73,7 +73,7 @@
 
   window.fb = { auth, db, storage, signInWithEmailAndPassword, signOut, getIdTokenResult,
     collection, getDocs, doc, setDoc, deleteDoc, writeBatch,
-    ref, uploadBytes, listAll, deleteObject };
+    ref, uploadBytes, listAll, deleteObject, getBytes };
   window.fbReady = true;
 </script>
 
@@ -161,13 +161,13 @@
     <p class="desc">Sube el archivo de hoy a Storage (<b>venta_vendedores/latest.json</b>) y guarda una copia con fecha en el histórico.</p>
     <div class="row">
       <div class="field">
-        <label>Archivo Venta Vendedores (.csv)</label>
-        <input type="file" id="f-venta" accept=".csv,.xls,.xlsx">
+        <label>Archivo(s) Venta Vendedores — podés elegir varios días juntos (Ctrl+click)</label>
+        <input type="file" id="f-venta" accept=".csv,.xls,.xlsx" multiple>
       </div>
       <button onclick="procesarVenta()">Procesar</button>
     </div>
     <div id="status-venta" class="status"></div>
-    <button class="secondary" id="dl-venta" style="display:none" onclick="subirArchivoStorage('venta_vendedores', window._ventaOut, 'status-venta')">☁️ Subir a Firebase</button>
+    <button class="secondary" id="dl-venta" style="display:none" onclick="subirDiaYReconstruirMesVenta()">☁️ Subir día(s) y reconstruir el mes</button>
   </div>
 
   <!-- 5. VENTA VENDEDORES PA → Storage -->
@@ -263,6 +263,34 @@ function showStatus(id, cls, msg){
   el.textContent = msg;
 }
 
+// Parser de texto delimitado (CSV/TSV) que respeta comillas: una coma o un salto de
+// línea DENTRO de un campo entre comillas no corta la fila. Sin esto, un producto
+// con una coma en el nombre (ej. "GOMITA SURTIDA, 5GR") desalinea toda la fila.
+function parseDelimitedText(text, delim){
+  var rows = [];
+  var row = [];
+  var field = '';
+  var inQuotes = false;
+  var i = 0, n = text.length;
+  while(i < n){
+    var c = text[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(text[i+1] === '"'){ field += '"'; i += 2; continue; }
+        inQuotes = false; i++; continue;
+      }
+      field += c; i++; continue;
+    }
+    if(c === '"'){ inQuotes = true; i++; continue; }
+    if(c === delim){ row.push(field); field=''; i++; continue; }
+    if(c === '\r'){ i++; continue; }
+    if(c === '\n'){ row.push(field); field=''; rows.push(row); row=[]; i++; continue; }
+    field += c; i++;
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+
 async function smartReadTabular(file){
   var buf = await readFileAsArrayBuffer(file);
   var bytes = new Uint8Array(buf.slice(0, 4));
@@ -279,14 +307,19 @@ async function smartReadTabular(file){
   }
 
   var text = new TextDecoder('utf-8').decode(buf);
-  var lines = text.split(/\r?\n/).filter(function(l){ return l.trim()!==''; });
-  if(!lines.length) return {header:[], rows:[]};
-  var firstLine = lines[0];
-  var delim = firstLine.split('\t').length > firstLine.split(',').length ? '\t' : ',';
-  var header = lines[0].replace(/^\uFEFF/,'').split(delim).map(function(h){ return h.trim().replace(/"/g,''); });
-  var rows = lines.slice(1).map(function(line){
-    return line.split(delim).map(function(x){ return x.trim().replace(/^"|"$/g,''); });
+  if(text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // BOM
+  if(!text.trim()) return {header:[], rows:[]};
+
+  var firstLineEnd = text.indexOf('\n');
+  var firstLineRaw = firstLineEnd>=0 ? text.slice(0, firstLineEnd) : text;
+  var delim = firstLineRaw.split('\t').length > firstLineRaw.split(',').length ? '\t' : ',';
+
+  var allRows = parseDelimitedText(text, delim).filter(function(r){
+    return r.length>1 || (r.length===1 && r[0].trim()!=='');
   });
+  if(!allRows.length) return {header:[], rows:[]};
+  var header = allRows[0].map(function(h){ return h.trim(); });
+  var rows = allRows.slice(1).map(function(r){ return r.map(function(x){ return x.trim(); }); });
   return {header: header, rows: rows};
 }
 
@@ -294,8 +327,92 @@ async function smartReadTabular(file){
 // SUBIDA A FIREBASE
 // ══════════════════════════════════════════════
 
-// Sube los 4 archivos "grandes" a Storage: latest.json + copia con fecha en historico/,
-// y de paso borra del histórico lo que tenga más de 60 días (2 meses máximo).
+// Sube los 4 archivos "grandes" a Storage: latest.json + copia con fecha en historico/
+// (función genérica para Objetivos Vendedores/Helados y Venta PA — Venta Vendedores
+// usa su propia función más abajo, porque acumula día a día en vez de reemplazar).
+
+// Sube TODOS los días procesados a venta_vendedores/dias/{fecha}.json (uno por
+// archivo), y reconstruye desde CERO el acumulado del mes (venta_vendedores/latest.json)
+// sumando TODOS los días del mes en curso que haya en Storage — una sola vez al
+// final, no una vez por archivo. Reconstruir de cero (en vez de "sumar arriba de lo
+// que había") evita que un día resubido/corregido se cuente dos veces.
+async function subirDiaYReconstruirMesVenta(){
+  const porFecha = window._ventaDiasOut;
+  if(!porFecha || !Object.keys(porFecha).length){ showStatus('status-venta','err','Procesá el/los archivo(s) primero.'); return; }
+
+  const fechas = Object.keys(porFecha).sort();
+  showStatus('status-venta','info','Subiendo '+fechas.length+' día(s)...');
+  try{
+    const { storage, ref, uploadBytes, listAll, getBytes } = window.fb;
+
+    // 1. Sube cada día tal cual (con detalle de producto) a dias/{fecha}.json
+    for(const fecha of fechas){
+      const contenidoDia = new Blob([JSON.stringify(porFecha[fecha])], {type:'application/json'});
+      await uploadBytes(ref(storage, 'venta_vendedores/dias/'+fecha+'.json'), contenidoDia);
+      showStatus('status-venta','info','Subido día '+fecha+'...');
+    }
+
+    // 2. Junta todos los días del MES EN CURSO que haya en Storage (usamos el mes
+    // de la última fecha subida como referencia)
+    showStatus('status-venta','info','Reconstruyendo el acumulado del mes...');
+    const fechaMasReciente = fechas[fechas.length-1];
+    const mesActual = fechaMasReciente.slice(0,7); // ej. "2026-07"
+    const listado = await listAll(ref(storage,'venta_vendedores/dias/'));
+    const archivosDelMes = listado.items.filter(function(item){ return item.name.startsWith(mesActual); });
+
+    // 3. Descarga y suma todos esos días (agrupando por vendedor+canal+cliente+rubro+segmento+producto)
+    const acumulado = {};
+    for(const item of archivosDelMes){
+      const bytes = await getBytes(item);
+      const texto = new TextDecoder('utf-8').decode(bytes);
+      const dia = JSON.parse(texto);
+      const idx = {}; dia.k.forEach(function(campo,i){ idx[campo]=i; });
+      dia.r.forEach(function(fila){
+        const key = [fila[idx.vc],fila[idx.ca],fila[idx.cl],fila[idx.ru],fila[idx.sg],fila[idx.pr]].join('|');
+        if(!acumulado[key]){
+          acumulado[key] = {vc:fila[idx.vc],ca:fila[idx.ca],cl:fila[idx.cl],ru:fila[idx.ru],sg:fila[idx.sg],pr:fila[idx.pr],
+            vp:0, mgAcum:0, bnAcum:0, bu:0, kg:0, tk:0, pv:0, fc:''};
+        }
+        const a = acumulado[key];
+        const vp = fila[idx.vp]||0;
+        a.vp += vp;
+        a.mgAcum += (fila[idx.mg]||0) * vp; // margen ponderado por venta $ (no promedio simple)
+        a.bnAcum += (fila[idx.bn]||0) * vp;
+        a.bu += fila[idx.bu]||0;
+        a.kg += fila[idx.kg]||0;
+        a.tk += fila[idx.tk]||0;
+        a.pv += fila[idx.pv]||0;
+        if(fila[idx.fc] && fila[idx.fc] > a.fc) a.fc = fila[idx.fc];
+      });
+    }
+
+    // 4. Arma las filas finales (margen/bonificación ya ponderados)
+    const filasFinal = Object.values(acumulado).map(function(a){
+      const mg = a.vp>0 ? (a.mgAcum/a.vp) : 0;
+      const bn = a.vp>0 ? (a.bnAcum/a.vp) : 0;
+      return [a.vc,a.ca,a.cl,a.ru,a.sg,a.pr, a.vp, mg, bn, a.bu, a.kg, a.tk, a.pv, a.fc];
+    });
+    const mesData = {k:['vc','ca','cl','ru','sg','pr','vp','mg','bn','bu','kg','tk','pv','fc'], r: filasFinal};
+
+    // 5. Sube el acumulado reconstruido como latest.json + UNA copia con fecha en
+    // histórico (la del día más reciente subido en esta tanda)
+    const contenidoMes = new Blob([JSON.stringify(mesData)], {type:'application/json'});
+    await uploadBytes(ref(storage,'venta_vendedores/latest.json'), contenidoMes);
+    await uploadBytes(ref(storage,'venta_vendedores/historico/'+fechaMasReciente+'.json'), contenidoMes);
+
+    // 6. Limpieza de archivos viejos (2 meses de margen), tanto histórico como días crudos
+    const borradosHist = await limpiarCarpetaVieja('venta_vendedores','historico');
+    const borradosDias = await limpiarCarpetaVieja('venta_vendedores','dias');
+
+    showStatus('status-venta','ok',
+      '✓ '+fechas.length+' día(s) subidos ('+fechas.join(', ')+'). Acumulado del mes reconstruido con '+archivosDelMes.length+' días en total ('+filasFinal.length+' líneas, con detalle de producto).'
+      + ((borradosHist||borradosDias) ? ('\n🧹 Limpieza: '+borradosHist+' históricos y '+borradosDias+' días viejos borrados (+2 meses).') : ''));
+  }catch(err){
+    console.error(err);
+    showStatus('status-venta','err','Error: '+err.message);
+  }
+}
+
 async function subirArchivoStorage(coleccion, data, statusId){
   if(!data){ showStatus(statusId,'err','Procesá el archivo primero.'); return; }
   showStatus(statusId,'info','Subiendo a Firebase...');
@@ -321,9 +438,9 @@ async function subirArchivoStorage(coleccion, data, statusId){
 // actual, en adelante. Ejemplo: si hoy es julio, se conserva mayo completo + junio
 // completo + julio en curso, y se borra abril y anterior. Así nunca queda un mes
 // "partido a la mitad" como pasaría con una ventana fija de X días corridos.
-async function limpiarHistoricoViejo(coleccion){
+async function limpiarCarpetaVieja(coleccion, subcarpeta){
   const { storage, ref, listAll, deleteObject } = window.fb;
-  const listado = await listAll(ref(storage, coleccion+'/historico/'));
+  const listado = await listAll(ref(storage, coleccion+'/'+subcarpeta+'/'));
   const hoy = new Date();
   const limite = new Date(hoy.getFullYear(), hoy.getMonth()-2, 1); // 1° del mes, 2 meses atrás
   let borrados = 0;
@@ -339,6 +456,7 @@ async function limpiarHistoricoViejo(coleccion){
   }
   return borrados;
 }
+async function limpiarHistoricoViejo(coleccion){ return limpiarCarpetaVieja(coleccion, 'historico'); }
 
 // Sincroniza la colección "clientes" en Firestore con las filas procesadas del
 // Maestro + Hoja de reparto: sube todos los clientes nuevos/actualizados, y borra
@@ -617,34 +735,60 @@ async function procesarHelados(){
 // ══════════════════════════════════════════════
 // 4. VENTA VENDEDORES
 // ══════════════════════════════════════════════
+async function parseArchivoVentaDia(file){
+  var t = await smartReadTabular(file);
+  var h = t.header;
+  var iVend=ci(h,'vendedor'), iCli=ci(h,'cliente'), iRub=ci(h,'rubro'), iSeg=ci(h,'segmento');
+  var iProd=ci(h,'Producto Completo');
+  var iVP=ci(h,'venta $$'), iMG=ci(h,'margen'), iBN=ci(h,'Bonificación');
+  var iBU=ci(h,'venta bu'), iKG=ci(h,'venta kg'), iCanal=ci(h,'canal'), iTK=ci(h,'venta tokin');
+  var iPV=ci(h,'producto vendidos'), iFC=ci(h,'date');
+
+  if(iFC<0) throw new Error(file.name+': no encontré la columna "Date" — ¿es el export diario nuevo?');
+
+  var fechasEnArchivo = new Set();
+  var rows = t.rows.map(function(c){
+    var vend = String(c[iVend]||'').trim();
+    var code = vend.slice(0,3);
+    var fc = String(c[iFC]||'').trim().slice(0,10);
+    if(fc) fechasEnArchivo.add(fc);
+    return [code,
+      (iCanal>=0?String(c[iCanal]||'').trim():''),
+      String(c[iCli]||'').trim(), String(c[iRub]||'').trim(), String(c[iSeg]||'').trim(),
+      (iProd>=0?String(c[iProd]||'').trim():''),
+      pm(c[iVP]), pp(c[iMG]), pp(c[iBN]),
+      parseFloat(c[iBU])||0, parseFloat(c[iKG])||0,
+      (iTK>=0?pm(c[iTK]):0), parseFloat(c[iPV])||0, fc];
+  }).filter(function(r){ return r[0]; });
+
+  if(fechasEnArchivo.size > 1) throw new Error(file.name+': tiene más de un día mezclado ('+[...fechasEnArchivo].join(', ')+').');
+  var fecha = [...fechasEnArchivo][0];
+  if(!fecha) throw new Error(file.name+': no pude detectar la fecha (columna "Date" vacía).');
+
+  return { fecha: fecha, data: {k:['vc','ca','cl','ru','sg','pr','vp','mg','bn','bu','kg','tk','pv','fc'], r: rows} };
+}
+
 async function procesarVenta(){
-  var file = document.getElementById('f-venta').files[0];
+  var files = Array.from(document.getElementById('f-venta').files || []);
   document.getElementById('dl-venta').style.display = 'none';
-  if(!file){ showStatus('status-venta','err','Subí el archivo de Venta Vendedores.'); return; }
-  showStatus('status-venta','info','Procesando...');
+  if(!files.length){ showStatus('status-venta','err','Subí uno o más archivos de Venta Vendedores (un día cada uno).'); return; }
+  showStatus('status-venta','info','Procesando '+files.length+' archivo(s)...');
 
   try{
-    var t = await smartReadTabular(file);
-    var h = t.header;
-    var iVend=ci(h,'vendedor'), iCli=ci(h,'cliente'), iRub=ci(h,'rubro'), iSeg=ci(h,'segmento');
-    var iVP=ci(h,'venta $$'), iMG=ci(h,'margen'), iBN=ci(h,'Bonificación');
-    var iBU=ci(h,'venta bu'), iKG=ci(h,'venta kg'), iCanal=ci(h,'canal'), iTK=ci(h,'venta tokin');
-    var iPV=ci(h,'producto vendidos'), iFC=ci(h,'última fecha');
+    var porFecha = {};
+    for(const file of files){
+      var res = await parseArchivoVentaDia(file);
+      if(porFecha[res.fecha]){
+        showStatus('status-venta','err','Hay dos archivos distintos con la misma fecha ('+res.fecha+'). Revisá cuál corresponde y volvé a intentar.');
+        return;
+      }
+      porFecha[res.fecha] = res.data;
+    }
 
-    var rows = t.rows.map(function(c){
-      var vend = String(c[iVend]||'').trim();
-      var code = vend.slice(0,3);
-      return [code,
-        (iCanal>=0?String(c[iCanal]||'').trim():''),
-        String(c[iCli]||'').trim(), String(c[iRub]||'').trim(), String(c[iSeg]||'').trim(),
-        pm(c[iVP]), pp(c[iMG]), pp(c[iBN]),
-        parseFloat(c[iBU])||0, parseFloat(c[iKG])||0,
-        (iTK>=0?pm(c[iTK]):0), parseFloat(c[iPV])||0,
-        (iFC>=0?String(c[iFC]||'').trim().slice(0,10):'')];
-    }).filter(function(r){ return r[0]; });
-
-    window._ventaOut = {k:['vc','ca','cl','ru','sg','vp','mg','bn','bu','kg','tk','pv','fc'], r: rows};
-    showStatus('status-venta','ok','✓ '+rows.length+' líneas generadas. Tocá "Subir a Firebase".');
+    window._ventaDiasOut = porFecha;
+    var fechas = Object.keys(porFecha).sort();
+    var totalFilas = fechas.reduce(function(s,f){ return s+porFecha[f].r.length; }, 0);
+    showStatus('status-venta','ok','✓ '+fechas.length+' día(s) procesados ('+fechas.join(', ')+'), '+totalFilas+' líneas en total.\nTocá "Subir días y reconstruir el mes".');
     document.getElementById('dl-venta').style.display = 'inline-block';
   }catch(err){
     console.error(err);
