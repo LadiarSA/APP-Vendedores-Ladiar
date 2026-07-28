@@ -240,16 +240,16 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
 
 <!-- ── TABS ── -->
 <div id="tabs">
-  <div class="tab-btn" onclick="switchTab('resumen')"><span class="tab-icon">📊</span>Clientes</div>
   <div class="tab-btn" onclick="switchTab('ruta')"><span class="tab-icon">📍</span>Mi Ruta</div>
   <div class="tab-btn" onclick="switchTab('miventa')"><span class="tab-icon">💰</span>Mi Venta</div>
-  <div class="tab-btn active" onclick="switchTab('objetivos')"><span class="tab-icon" style="color:#1a73e8">🎯</span>Objetivos Mes</div>
+  <div class="tab-btn active" onclick="switchTab('objetivos')"><span class="tab-icon" style="color:#1a73e8">🎯</span>Mis Objetivos</div>
+  <div class="tab-btn" onclick="switchTab('oficina')"><span class="tab-icon">🗂️</span>Mi Oficina</div>
 </div>
 
 <!-- ── CONTENT ── -->
 <div id="content">
 
-  <!-- RESUMEN -->
+  <!-- RESUMEN (Clientes) — ya no es pestaña de arriba, se llega desde Mi Oficina -->
   <div class="panel" id="panel-resumen"></div>
 
   <!-- COMPARATIVA -->
@@ -375,6 +375,59 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
   </div>
   <!-- Main content -->
   <div id="mv-main" style="flex:1;min-height:0;overflow-y:scroll;-webkit-overflow-scrolling:touch;padding:10px 14px 80px 14px;display:flex;flex-direction:column;gap:10px"></div>
+</div>
+
+<!-- MI OFICINA -->
+<div class="panel" id="panel-oficina" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
+  <div style="background:#5f6368;padding:10px 14px;flex-shrink:0">
+    <div style="color:#fff;font-weight:800;font-size:14px">🗂️ Mi Oficina</div>
+    <div style="color:#dadce0;font-size:11px">Consultas y trámites</div>
+  </div>
+  <div style="flex:1;min-height:0;overflow-y:scroll;-webkit-overflow-scrolling:touch;padding:14px;display:flex;flex-direction:column;gap:10px">
+
+    <div onclick="switchTab('resumen')" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
+      <span style="font-size:22px">📋</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#202124">Clientes</div>
+        <div style="font-size:11px;color:#80868b">Cómo se componen tus PDV por semana y categoría</div>
+      </div>
+    </div>
+
+    <div onclick="oficinaProximamente('Alta Nuevo Cliente')" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
+      <span style="font-size:22px">➕</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#202124">Alta Nuevo Cliente</div>
+        <div style="font-size:11px;color:#80868b">Cargar un punto de venta nuevo</div>
+      </div>
+    </div>
+
+    <div onclick="oficinaProximamente('Alta Reclamo Cliente')" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer;opacity:.6">
+      <span style="font-size:22px">⚠️</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#202124">Alta Reclamo Cliente</div>
+        <div style="font-size:11px;color:#80868b">Próximamente</div>
+      </div>
+    </div>
+
+    <div onclick="oficinaProximamente('Catálogo Lanzamientos')" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer;opacity:.6">
+      <span style="font-size:22px">📖</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#202124">Catálogo Lanzamientos</div>
+        <div style="font-size:11px;color:#80868b">Próximamente</div>
+      </div>
+    </div>
+
+    <a href="https://gestiondigital.itc-cloud.com.ar/Account/Login?returnUrl=%2FUser" target="_blank" rel="noopener" style="text-decoration:none">
+      <div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
+        <span style="font-size:22px">💵</span>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:#202124">Recibos de Sueldo</div>
+          <div style="font-size:11px;color:#80868b">Se abre en una pestaña nueva ↗</div>
+        </div>
+      </div>
+    </a>
+
+  </div>
 </div>
 </div>
 
@@ -815,10 +868,14 @@ const depotIcon = L.divIcon({
 // ── TABS ──
 let comparativaBuilt = false;
 
+function oficinaProximamente(nombre){
+  alert('🚧 '+nombre+'\n\nEsta función todavía se está construyendo. Pronto vas a poder usarla desde acá.');
+}
+
 function switchTab(tab){
   activeTab = tab;
   document.querySelectorAll('.tab-btn').forEach((t,i)=>{
-    const idx = tab==='resumen'?0:tab==='ruta'?1:tab==='miventa'?2:tab==='objetivos'?3:-1;
+    const idx = tab==='ruta'?0:tab==='miventa'?1:tab==='objetivos'?2:tab==='oficina'?3:-1;
     t.classList.toggle('active', i===idx);
   });
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
@@ -1928,17 +1985,6 @@ function mvRenderKPIs(){
   var avgMg=totMG/n; var avgBn=totBN/n;
   var isTokin = mvMetric==='tokin';
 
-  // Venta año anterior: se busca por CLIENTE (no por vendedor), porque las carteras
-  // cambiaron de zona y el vendedor de hoy puede no ser el de hace un año. Se comparan
-  // los mismos clientes que ves ahora (con los filtros activos) contra VENTA_PA_RAW.
-  // No aplica en modo Venta Tokin, porque no hay dato histórico de Tokin.
-  var rubro=document.getElementById('mv-rubro').value;
-  var seg  =document.getElementById('mv-segmento').value;
-  var canal=document.getElementById('mv-canal').value;
-  var totVPPA = isTokin ? null : mvClientPA(clientes, rubro, seg, canal);
-
-  var vsPAPct = (totVPPA!==null && totVPPA>0) ? ((totVP/totVPPA-1)*100) : null;
-
   document.getElementById('mv-count').textContent=mvFiltered.length.toLocaleString('es-AR')+' registros'+(isTokin?' (con venta Tokin)':'');
   document.getElementById('mv-subtitle').textContent=clientes.size+' clientes · '+totPV+' productos vendidos';
 
@@ -1951,10 +1997,6 @@ function mvRenderKPIs(){
     {l:'Clientes',      v:clientes.size+'',            c:'#5f6368'},
     {l:'Productos',     v:totPV+'',                    c:'#5f6368'},
   ];
-  if(!isTokin){
-    kpis.push({l:'Venta $ año ant. (clientes)', v:(totVPPA===null?'s/d':fmtV(totVPPA)), c:'#5f6368'});
-    kpis.push({l:'vs. año anterior', v:(vsPAPct===null?'s/d':(vsPAPct>=0?'+':'')+vsPAPct.toFixed(1)+'%'), c:(vsPAPct===null?'#5f6368':(vsPAPct>=0?'#2e7d32':'#c62828'))});
-  }
   document.getElementById('mv-kpis').innerHTML=kpis.map(function(k){
     return '<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:8px 10px;min-width:0">'
       +'<div style="font-size:9px;color:#80868b;font-weight:700;text-transform:uppercase;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+k.l+'</div>'
