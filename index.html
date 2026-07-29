@@ -489,7 +489,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
         <option>Consumidor Final</option>
       </select>
 
-      <label class="alta-lbl">Adjuntar documentación (constancia de CUIT/CUIL/DNI) *</label>
+      <label class="alta-lbl">Adjuntar documentación (constancia de CUIT/CUIL/DNI)</label>
       <input type="file" id="alta-documentacion" class="alta-input" accept="image/*,application/pdf" style="border-style:dashed;background:#f8f9fa">
     </div>
 
@@ -1175,7 +1175,6 @@ async function altaGuardarCliente(){
   if(!val('alta-localidad')) faltantes.push('Localidad');
   if(!val('alta-cuit')) faltantes.push('CUIL/CUIT/DNI');
   if(!val('alta-categoria-iva')) faltantes.push('Categoría de IVA');
-  if(!archivo) faltantes.push('Documentación adjunta');
   if(!canal) faltantes.push('Canal');
   if(!val('alta-categoria-pdv')) faltantes.push('Categoría del PDV');
   if(!listaPrecios) faltantes.push('Lista de precios');
@@ -1204,9 +1203,13 @@ async function altaGuardarCliente(){
     var zc = altaGetZonaYCompanero();
     var code = getVendorCode();
 
-    // 1. Subir el adjunto a Storage
-    var nombreArchivo = 'altas_documentacion/'+Date.now()+'_'+code+'_'+archivo.name;
-    await uploadBytes(ref(storage, nombreArchivo), archivo);
+    // 1. Subir el adjunto a Storage (si el vendedor cargó uno; ahora es opcional,
+    //    el administrativo puede conseguir la constancia después)
+    var nombreArchivo = '';
+    if(archivo){
+      nombreArchivo = 'altas_documentacion/'+Date.now()+'_'+code+'_'+archivo.name;
+      await uploadBytes(ref(storage, nombreArchivo), archivo);
+    }
 
     // 2. Armar y guardar el documento en Firestore
     var data = {
@@ -2901,7 +2904,11 @@ function adminClearAllMoves(){
   adminSaveManualMovesFirestore();
 }
 
-// ── ADMIN: Altas de Cliente (Fase 1 — solo lectura) ──
+// ── ADMIN: Altas de Cliente (Fase 3 — aprobar/rechazar + exportar) ──
+var adminAltasCache = [];   // último snapshot traído de Firestore, con {id,...datos}
+var adminAltasFiltro = 'pendiente'; // 'pendiente' | 'aprobado' | 'rechazado' | 'todas'
+var jsPDFLoadedAdmin = false;
+
 function adminFmtFechaAlta(ts){
   // ts es un Firestore Timestamp (tiene .toDate()); si por algo llega null/undefined
   // (ej. el doc recién se creó y el serverTimestamp todavía no resolvió), mostramos guion.
@@ -2916,64 +2923,270 @@ function adminFmtFechaAlta(ts){
 
 async function adminCargarAltas(){
   const el = document.getElementById('admin-altas-content');
-  const countEl = document.getElementById('admin-altas-count');
   if(!el) return;
   el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px 10px">Cargando altas...</div>';
-  if(countEl) countEl.textContent = '';
 
   try{
-    const { db, collection, getDocs, query, where, orderBy } = window.fb;
-    const q = query(collection(db,'altas_pendientes'), where('estado','==','pendiente'), orderBy('fecha_creacion','desc'));
+    // Ya no filtramos por estado en la consulta: traemos todas (ordenadas por fecha)
+    // y el filtro pendiente/aprobada/rechazada/todas se aplica en el cliente. Esto
+    // también evita depender de un índice compuesto en Firestore.
+    const { db, collection, getDocs, query, orderBy } = window.fb;
+    const q = query(collection(db,'altas_pendientes'), orderBy('fecha_creacion','desc'));
     const snap = await getDocs(q);
 
-    if(countEl) countEl.textContent = snap.size + (snap.size===1 ? ' alta pendiente' : ' altas pendientes');
+    adminAltasCache = [];
+    snap.forEach(docSnap=>{ adminAltasCache.push(Object.assign({id:docSnap.id}, docSnap.data())); });
 
-    if(snap.empty){
-      el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px 10px">No hay altas pendientes por el momento.</div>';
-      return;
-    }
-
-    let html = '';
-    snap.forEach(docSnap=>{
-      const a = docSnap.data();
-      html += `<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:14px 16px;margin-bottom:12px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-          <div>
-            <div style="font-size:14px;font-weight:700;color:#2c3e50">${a.nombre_negocio||a.razon_social||'(sin nombre)'}</div>
-            <div style="font-size:11px;color:#9aa0a6">${a.direccion||''}${a.localidad?(', '+a.localidad):''}</div>
-          </div>
-          <div style="font-size:10px;color:#9aa0a6;text-align:right;white-space:nowrap">${adminFmtFechaAlta(a.fecha_creacion)}</div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:11.5px;color:#5f6368;margin-bottom:8px">
-          <div><b>Vendedor:</b> ${a.vendedor_nombre||''} (${a.vendedor_code||''})</div>
-          <div><b>Zona:</b> ${a.zona||'—'}</div>
-          <div><b>Razón Social:</b> ${a.razon_social||''}</div>
-          <div><b>CUIT/DNI:</b> ${a.cuit_dni||''}</div>
-          <div><b>Categoría IVA:</b> ${a.categoria_iva||''}</div>
-          <div><b>Canal:</b> ${a.canal||''}</div>
-          <div><b>Categoría PDV:</b> ${a.categoria_pdv||''}</div>
-          <div><b>Lista de precios:</b> ${a.lista_precios||''}</div>
-          <div><b>Transportista:</b> ${a.transportista||''}</div>
-          <div><b>Dueño/comprador:</b> ${a.dueno_nombre||''}</div>
-          <div><b>Contacto:</b> ${a.celular||''}${a.mail?(' · '+a.mail):''}</div>
-          <div><b>Coordenadas:</b> ${a.lat!=null && a.lon!=null ? a.lat.toFixed(5)+', '+a.lon.toFixed(5) : '—'}</div>
-          <div><b>Horario entrega:</b> ${a.horario_entrega||''}</div>
-        </div>
-        <div style="font-size:11.5px;color:#5f6368;margin-bottom:8px">
-          <b>Visita ${a.vendedor_nombre||'vendedor alta'}:</b> ${a.dia_alta||''} · ${a.frecuencia_alta||''} · orden ${a.orden_alta!=null?a.orden_alta:'—'}
-          &nbsp;&nbsp;|&nbsp;&nbsp;
-          <b>Visita ${a.companero_nombre||'compañero'}:</b> ${a.dia_companero||''} · ${a.frecuencia_companero||''} · orden ${a.orden_companero!=null?a.orden_companero:'—'}
-        </div>
-        ${a.observaciones ? `<div style="font-size:11.5px;color:#5f6368;margin-bottom:8px"><b>Observaciones:</b> ${a.observaciones}</div>` : ''}
-        <div style="font-size:10.5px;color:#9aa0a6">📎 ${a.documentacion_path ? a.documentacion_path.split('/').pop() : 'sin adjunto'}</div>
-      </div>`;
-    });
-    el.innerHTML = html;
+    adminRenderAltasFiltros();
+    adminRenderAltasList();
   }catch(err){
     console.error('[adminCargarAltas]', err);
     el.innerHTML = '<div style="text-align:center;color:#ea4335;font-size:12.5px;padding:16px 10px">Error al cargar las altas: '+(err.message||err)+'</div>';
   }
 }
+
+function adminRenderAltasFiltros(){
+  const el = document.getElementById('admin-altas-filtros');
+  if(!el) return;
+  const counts = {pendiente:0, aprobado:0, rechazado:0};
+  adminAltasCache.forEach(a=>{
+    const e = a.estado || 'pendiente';
+    if(counts[e]===undefined) counts[e]=0;
+    counts[e]++;
+  });
+  const opciones = [
+    {key:'pendiente', label:'Pendientes', count:counts.pendiente, color:'#f9ab00'},
+    {key:'aprobado',  label:'Aprobadas',  count:counts.aprobado,  color:'#188038'},
+    {key:'rechazado', label:'Rechazadas', count:counts.rechazado, color:'#ea4335'},
+    {key:'todas',     label:'Todas',      count:adminAltasCache.length, color:'#2c3e50'}
+  ];
+  el.innerHTML = opciones.map(function(o){
+    const activo = adminAltasFiltro===o.key;
+    return '<button onclick="adminSetAltasFiltro(\''+o.key+'\')" style="font-size:11px;padding:6px 12px;border:1.5px solid '+o.color+';color:'+(activo?'#fff':o.color)+';background:'+(activo?o.color:'#fff')+';border-radius:16px;cursor:pointer;font-weight:700">'+o.label+' ('+o.count+')</button>';
+  }).join('');
+}
+
+function adminSetAltasFiltro(f){
+  adminAltasFiltro = f;
+  adminRenderAltasFiltros();
+  adminRenderAltasList();
+}
+
+function adminRenderAltasList(){
+  const el = document.getElementById('admin-altas-content');
+  if(!el) return;
+
+  const lista = adminAltasFiltro==='todas'
+    ? adminAltasCache
+    : adminAltasCache.filter(a=>(a.estado||'pendiente')===adminAltasFiltro);
+
+  if(!lista.length){
+    el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px 10px">No hay altas en esta categoría.</div>';
+    return;
+  }
+
+  const badgeColor = {pendiente:'#f9ab00', aprobado:'#188038', rechazado:'#ea4335'};
+  const badgeLabel = {pendiente:'Pendiente', aprobado:'Aprobada', rechazado:'Rechazada'};
+
+  let html = '';
+  lista.forEach(a=>{
+    const estado = a.estado || 'pendiente';
+    html += `<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:14px 16px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <div style="font-size:14px;font-weight:700;color:#2c3e50">${a.nombre_negocio||a.razon_social||'(sin nombre)'}</div>
+            <span style="font-size:9.5px;font-weight:700;color:#fff;background:${badgeColor[estado]};border-radius:10px;padding:2px 8px">${badgeLabel[estado]}</span>
+          </div>
+          <div style="font-size:11px;color:#9aa0a6">${a.direccion||''}${a.localidad?(', '+a.localidad):''}</div>
+        </div>
+        <div style="font-size:10px;color:#9aa0a6;text-align:right;white-space:nowrap">${adminFmtFechaAlta(a.fecha_creacion)}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:11.5px;color:#5f6368;margin-bottom:8px">
+        <div><b>Vendedor:</b> ${a.vendedor_nombre||''} (${a.vendedor_code||''})</div>
+        <div><b>Zona:</b> ${a.zona||'—'}</div>
+        <div><b>Razón Social:</b> ${a.razon_social||''}</div>
+        <div><b>CUIT/DNI:</b> ${a.cuit_dni||''}</div>
+        <div><b>Categoría IVA:</b> ${a.categoria_iva||''}</div>
+        <div><b>Canal:</b> ${a.canal||''}</div>
+        <div><b>Categoría PDV:</b> ${a.categoria_pdv||''}</div>
+        <div><b>Lista de precios:</b> ${a.lista_precios||''}</div>
+        <div><b>Transportista:</b> ${a.transportista||''}</div>
+        <div><b>Dueño/comprador:</b> ${a.dueno_nombre||''}</div>
+        <div><b>Contacto:</b> ${a.celular||''}${a.mail?(' · '+a.mail):''}</div>
+        <div><b>Coordenadas:</b> ${a.lat!=null && a.lon!=null ? a.lat.toFixed(5)+', '+a.lon.toFixed(5) : '—'}</div>
+        <div><b>Horario entrega:</b> ${a.horario_entrega||''}</div>
+      </div>
+      <div style="font-size:11.5px;color:#5f6368;margin-bottom:8px">
+        <b>Visita ${a.vendedor_nombre||'vendedor alta'}:</b> ${a.dia_alta||''} · ${a.frecuencia_alta||''} · orden ${a.orden_alta!=null?a.orden_alta:'—'}
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        <b>Visita ${a.companero_nombre||'compañero'}:</b> ${a.dia_companero||''} · ${a.frecuencia_companero||''} · orden ${a.orden_companero!=null?a.orden_companero:'—'}
+      </div>
+      ${a.observaciones ? `<div style="font-size:11.5px;color:#5f6368;margin-bottom:8px"><b>Observaciones:</b> ${a.observaciones}</div>` : ''}
+      <div style="font-size:10.5px;color:#9aa0a6;margin-bottom:10px">📎 ${a.documentacion_path ? a.documentacion_path.split('/').pop() : 'sin adjunto'}</div>
+      ${estado!=='pendiente' ? `<div style="font-size:10px;color:#9aa0a6;margin-bottom:10px">Resuelta por ${a.resuelto_por||'—'} el ${adminFmtFechaAlta(a.fecha_resolucion)}</div>` : ''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid #f1f3f4;padding-top:10px">
+        ${estado==='pendiente' ? `
+          <button onclick="adminResolverAlta('${a.id}','aprobado')" style="font-size:11px;padding:6px 12px;border:1.5px solid #188038;color:#fff;background:#188038;border-radius:6px;cursor:pointer;font-weight:700">✅ Aprobar</button>
+          <button onclick="adminResolverAlta('${a.id}','rechazado')" style="font-size:11px;padding:6px 12px;border:1.5px solid #ea4335;color:#fff;background:#ea4335;border-radius:6px;cursor:pointer;font-weight:700">❌ Rechazar</button>
+        ` : `
+          <button onclick="adminResolverAlta('${a.id}','pendiente')" style="font-size:11px;padding:6px 12px;border:1px solid #dadce0;color:#5f6368;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">↺ Volver a pendiente</button>
+        `}
+        <button onclick="adminExportAltaPDF('${a.id}')" style="font-size:11px;padding:6px 12px;border:1.5px solid #2c3e50;color:#2c3e50;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">📄 PDF</button>
+      </div>
+    </div>`;
+  });
+  el.innerHTML = html;
+}
+
+async function adminResolverAlta(id, nuevoEstado){
+  const labels = {aprobado:'aprobar', rechazado:'rechazar', pendiente:'devolver a pendiente'};
+  if(!confirm('¿Confirmás '+labels[nuevoEstado]+' esta alta?')) return;
+  try{
+    const { db, doc, setDoc, serverTimestamp } = window.fb;
+    const data = { estado: nuevoEstado };
+    if(nuevoEstado==='pendiente'){
+      data.resuelto_por = null;
+      data.fecha_resolucion = null;
+    } else {
+      data.resuelto_por = currentAdmin || '';
+      data.fecha_resolucion = serverTimestamp();
+    }
+    await setDoc(doc(db,'altas_pendientes',id), data, {merge:true});
+    await adminCargarAltas(); // re-trae todo para tener la fecha_resolucion real del servidor
+  }catch(err){
+    console.error('[adminResolverAlta]', err);
+    alert('Error al actualizar el estado: '+(err.message||err));
+  }
+}
+
+async function adminExportAltasExcel(){
+  const lista = adminAltasFiltro==='todas'
+    ? adminAltasCache
+    : adminAltasCache.filter(a=>(a.estado||'pendiente')===adminAltasFiltro);
+  if(!lista.length){ alert('No hay altas para exportar en este filtro.'); return; }
+
+  try{
+    await ensureSheetJSVend();
+    const header = ['Estado','Fecha alta','Vendedor','Código vend.','Zona','Razón Social','Nombre Negocio',
+      'Dirección','Localidad','CUIT/DNI','Categoría IVA','Canal','Categoría PDV','Lista de precios',
+      'Dueño/comprador','Celular','Mail','Latitud','Longitud','Transportista','Horario entrega',
+      'Día visita alta','Frecuencia alta','Orden alta','Vendedor compañero','Día visita compañero',
+      'Frecuencia compañero','Orden compañero','Observaciones','Adjunto','Resuelto por','Fecha resolución'];
+    const aoa = [header];
+    lista.forEach(a=>{
+      aoa.push([
+        a.estado||'pendiente', adminFmtFechaAlta(a.fecha_creacion), a.vendedor_nombre||'', a.vendedor_code||'',
+        a.zona||'', a.razon_social||'', a.nombre_negocio||'', a.direccion||'', a.localidad||'',
+        a.cuit_dni||'', a.categoria_iva||'', a.canal||'', a.categoria_pdv||'', a.lista_precios||'',
+        a.dueno_nombre||'', a.celular||'', a.mail||'', a.lat!=null?a.lat:'', a.lon!=null?a.lon:'',
+        a.transportista||'', a.horario_entrega||'', a.dia_alta||'', a.frecuencia_alta||'', a.orden_alta!=null?a.orden_alta:'',
+        a.companero_nombre||'', a.dia_companero||'', a.frecuencia_companero||'', a.orden_companero!=null?a.orden_companero:'',
+        a.observaciones||'', a.documentacion_path ? a.documentacion_path.split('/').pop() : '',
+        a.resuelto_por||'', a.fecha_resolucion ? adminFmtFechaAlta(a.fecha_resolucion) : ''
+      ]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Altas');
+    const ts = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+    XLSX.writeFile(wb, `altas_clientes_${adminAltasFiltro}_${ts}.xlsx`);
+  }catch(err){
+    console.error('[adminExportAltasExcel]', err);
+    alert('Error al generar el Excel: '+(err.message||err));
+  }
+}
+
+function ensureJsPDFAdmin(){
+  if(jsPDFLoadedAdmin && window.jspdf) return Promise.resolve();
+  return new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    s.onload=()=>{jsPDFLoadedAdmin=true;res();};
+    s.onerror=()=>rej(new Error('No se pudo cargar el generador de PDF'));
+    document.head.appendChild(s);
+  });
+}
+
+async function adminExportAltaPDF(id){
+  const a = adminAltasCache.find(x=>x.id===id);
+  if(!a){ alert('No se encontró el alta (probá Actualizar y reintentá).'); return; }
+
+  try{
+    await ensureJsPDFAdmin();
+    const { jsPDF } = window.jspdf;
+    const docPdf = new jsPDF({unit:'mm', format:'a4'});
+    const margin = 18;
+    const pageW = docPdf.internal.pageSize.getWidth();
+    const pageH = docPdf.internal.pageSize.getHeight();
+    let y = margin;
+    const lineH = 6;
+
+    function addLine(text, opts){
+      opts = opts || {};
+      docPdf.setFont('helvetica', opts.bold ? 'bold' : 'normal');
+      docPdf.setFontSize(opts.size || 10.5);
+      const lines = docPdf.splitTextToSize(String(text), pageW - margin*2);
+      lines.forEach(line=>{
+        if(y > pageH - margin){ docPdf.addPage(); y = margin; }
+        docPdf.text(line, margin, y);
+        y += lineH;
+      });
+    }
+    function espacio(mm){ y += (mm||3); }
+
+    const estado = a.estado || 'pendiente';
+    const estadoLabel = {pendiente:'PENDIENTE', aprobado:'APROBADA', rechazado:'RECHAZADA'}[estado];
+
+    addLine('LADIAR S.A. — Alta de Cliente', {bold:true, size:15});
+    espacio(2);
+    addLine('Estado: '+estadoLabel, {bold:true});
+    addLine('Fecha de alta: '+adminFmtFechaAlta(a.fecha_creacion));
+    if(estado!=='pendiente'){
+      addLine('Resuelta por: '+(a.resuelto_por||'—')+'  ·  Fecha de resolución: '+adminFmtFechaAlta(a.fecha_resolucion));
+    }
+    espacio(3);
+
+    addLine('Datos del cliente', {bold:true, size:12});
+    addLine('Nombre del Negocio: '+(a.nombre_negocio||''));
+    addLine('Razón Social: '+(a.razon_social||''));
+    addLine('Dirección: '+(a.direccion||'')+', '+(a.localidad||''));
+    addLine('CUIT/CUIL/DNI: '+(a.cuit_dni||'')+'   Categoría IVA: '+(a.categoria_iva||''));
+    addLine('Dueño/comprador: '+(a.dueno_nombre||''));
+    addLine('Contacto: '+(a.celular||'')+(a.mail?(' · '+a.mail):''));
+    espacio(3);
+
+    addLine('Datos del PDV', {bold:true, size:12});
+    addLine('Canal: '+(a.canal||'')+'   Categoría PDV: '+(a.categoria_pdv||''));
+    addLine('Lista de precios: '+(a.lista_precios||''));
+    addLine('Coordenadas: '+(a.lat!=null && a.lon!=null ? a.lat.toFixed(5)+', '+a.lon.toFixed(5) : '—'));
+    espacio(3);
+
+    addLine('Datos de Visita y Entrega', {bold:true, size:12});
+    addLine('Transportista: '+(a.transportista||'')+'   Horario de entrega: '+(a.horario_entrega||''));
+    addLine('Vendedor que da el alta: '+(a.vendedor_nombre||'')+' ('+(a.vendedor_code||'')+')  ·  Zona '+(a.zona||''));
+    addLine('  Visita: '+(a.dia_alta||'')+' · '+(a.frecuencia_alta||'')+' · orden '+(a.orden_alta!=null?a.orden_alta:'—'));
+    addLine('Vendedor compañero: '+(a.companero_nombre||''));
+    addLine('  Visita: '+(a.dia_companero||'')+' · '+(a.frecuencia_companero||'')+' · orden '+(a.orden_companero!=null?a.orden_companero:'—'));
+    espacio(3);
+
+    if(a.observaciones){
+      addLine('Observaciones', {bold:true, size:12});
+      addLine(a.observaciones);
+      espacio(3);
+    }
+
+    addLine('Documentación adjunta: '+(a.documentacion_path ? a.documentacion_path.split('/').pop() : 'sin adjunto'));
+
+    const safeName = (a.nombre_negocio||a.razon_social||'cliente').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'_').toLowerCase();
+    const ts = new Date().toISOString().slice(0,10);
+    docPdf.save(`alta_${safeName}_${ts}.pdf`);
+  }catch(err){
+    console.error('[adminExportAltaPDF]', err);
+    alert('Error al generar el PDF: '+(err.message||err));
+  }
+}
+
 
 function adminUndoClientEdit(editId){
   const idx = adminClientEditLog.findIndex(e=>e.editId===editId);
@@ -4636,11 +4849,14 @@ function supRenderHelados(data){
     <div id="admin-cambios-content" style="flex:1;overflow-y:auto;padding:14px 16px"></div>
   </div>
 
-  <!-- ALTAS DE CLIENTES (Fase 1: solo visualización) -->
+  <!-- ALTAS DE CLIENTES (Fase 3: aprobar/rechazar + exportar) -->
   <div id="admin-panel-altas" style="display:none;flex:1;flex-direction:column;overflow:hidden">
-    <div style="background:#f8f9fa;border-bottom:1px solid #e8eaed;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
-      <span style="font-size:11.5px;color:#5f6368;font-weight:700" id="admin-altas-count"></span>
-      <button onclick="adminCargarAltas()" style="font-size:11px;padding:6px 12px;border:1.5px solid #2c3e50;color:#2c3e50;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">🔄 Actualizar</button>
+    <div style="background:#f8f9fa;border-bottom:1px solid #e8eaed;padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;flex-shrink:0">
+      <div id="admin-altas-filtros" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      <div style="display:flex;gap:8px">
+        <button onclick="adminExportAltasExcel()" style="font-size:11px;padding:6px 12px;border:1.5px solid #188038;color:#188038;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">⬇ Exportar Excel</button>
+        <button onclick="adminCargarAltas()" style="font-size:11px;padding:6px 12px;border:1.5px solid #2c3e50;color:#2c3e50;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">🔄 Actualizar</button>
+      </div>
     </div>
     <div id="admin-altas-content" style="flex:1;overflow-y:auto;padding:14px 16px"></div>
   </div>
