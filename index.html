@@ -459,8 +459,11 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
     <div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:12px 14px;margin-bottom:12px">
       <div style="font-size:9.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Datos del cliente</div>
 
-      <label class="alta-lbl">Nombre del cliente *</label>
-      <input type="text" id="alta-nombre" class="alta-input" placeholder="Ej: Kiosco Don José">
+      <label class="alta-lbl">Razón Social *</label>
+      <input type="text" id="alta-nombre" class="alta-input" placeholder="Ej: Pérez Juan Carlos">
+
+      <label class="alta-lbl">Nombre del Negocio (fantasía)</label>
+      <input type="text" id="alta-nombre-negocio" class="alta-input" placeholder="Ej: Kiosco Don José (si lo dejás vacío, se usa la Razón Social)">
 
       <label class="alta-lbl">Dirección completa *</label>
       <input type="text" id="alta-direccion" class="alta-input" placeholder="Calle, número, localidad">
@@ -1093,7 +1096,7 @@ function altaToggleOtro(selectId, otroId){
 
 function abrirAltaCliente(){
   // Reset del formulario
-  ['alta-nombre','alta-direccion','alta-cuit','alta-dueno','alta-celular','alta-mail',
+  ['alta-nombre','alta-nombre-negocio','alta-direccion','alta-cuit','alta-dueno','alta-celular','alta-mail',
    'alta-orden-alta','alta-orden-companero','alta-observaciones','alta-canal-otro',
    'alta-lista-precios-otro','alta-transportista-otro'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.value='';
@@ -1167,7 +1170,7 @@ async function altaGuardarCliente(){
   var archivo = document.getElementById('alta-documentacion').files[0];
 
   var faltantes = [];
-  if(!val('alta-nombre')) faltantes.push('Nombre del cliente');
+  if(!val('alta-nombre')) faltantes.push('Razón Social');
   if(!val('alta-direccion')) faltantes.push('Dirección');
   if(!val('alta-localidad')) faltantes.push('Localidad');
   if(!val('alta-cuit')) faltantes.push('CUIL/CUIT/DNI');
@@ -1209,7 +1212,8 @@ async function altaGuardarCliente(){
     var data = {
       vendedor_code: code, vendedor_nombre: currentVendor,
       zona: zc.zona || '', companero_nombre: zc.companero || '',
-      cliente_nombre: val('alta-nombre'), direccion: val('alta-direccion'), localidad: val('alta-localidad'),
+      razon_social: val('alta-nombre'), nombre_negocio: val('alta-nombre-negocio') || val('alta-nombre'),
+      direccion: val('alta-direccion'), localidad: val('alta-localidad'),
       cuit_dni: val('alta-cuit'), categoria_iva: val('alta-categoria-iva'), documentacion_path: nombreArchivo,
       canal: canal, categoria_pdv: val('alta-categoria-pdv'), lista_precios: listaPrecios,
       dueno_nombre: val('alta-dueno'), celular: val('alta-celular'), mail: val('alta-mail'),
@@ -2935,7 +2939,7 @@ async function adminCargarAltas(){
       html += `<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:14px 16px;margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
           <div>
-            <div style="font-size:14px;font-weight:700;color:#2c3e50">${a.cliente_nombre||'(sin nombre)'}</div>
+            <div style="font-size:14px;font-weight:700;color:#2c3e50">${a.nombre_negocio||a.razon_social||'(sin nombre)'}</div>
             <div style="font-size:11px;color:#9aa0a6">${a.direccion||''}${a.localidad?(', '+a.localidad):''}</div>
           </div>
           <div style="font-size:10px;color:#9aa0a6;text-align:right;white-space:nowrap">${adminFmtFechaAlta(a.fecha_creacion)}</div>
@@ -2943,6 +2947,7 @@ async function adminCargarAltas(){
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:11.5px;color:#5f6368;margin-bottom:8px">
           <div><b>Vendedor:</b> ${a.vendedor_nombre||''} (${a.vendedor_code||''})</div>
           <div><b>Zona:</b> ${a.zona||'—'}</div>
+          <div><b>Razón Social:</b> ${a.razon_social||''}</div>
           <div><b>CUIT/DNI:</b> ${a.cuit_dni||''}</div>
           <div><b>Categoría IVA:</b> ${a.categoria_iva||''}</div>
           <div><b>Canal:</b> ${a.canal||''}</div>
