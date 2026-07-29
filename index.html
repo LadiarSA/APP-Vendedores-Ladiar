@@ -417,11 +417,11 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
       </div>
     </div>
 
-    <div onclick="oficinaProximamente('Catálogo Lanzamientos')" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer;opacity:.6">
+    <div onclick="abrirCatalogo()" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
       <span style="font-size:22px">📖</span>
       <div>
         <div style="font-size:13px;font-weight:700;color:#202124">Catálogo Lanzamientos</div>
-        <div style="font-size:11px;color:#80868b">Próximamente</div>
+        <div style="font-size:11px;color:#80868b">Novedades y productos nuevos</div>
       </div>
     </div>
 
@@ -626,6 +626,36 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
     <button onclick="altaGuardarCliente()" id="alta-btn-guardar" style="width:100%;padding:12px;border:none;background:#188038;color:#fff;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">Guardar Alta</button>
   </div>
 </div>
+
+<!-- Catálogo de Lanzamientos (vendedor) -->
+<div class="panel" id="panel-catalogo-lanzamientos" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
+  <div style="background:#188038;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+    <span onclick="switchTab('oficina')" style="color:#fff;font-size:20px;cursor:pointer">←</span>
+    <div style="color:#fff;font-weight:800;font-size:14px">📖 Catálogo Lanzamientos</div>
+  </div>
+  <div id="catalogo-filtros" style="display:flex;gap:6px;flex-wrap:wrap;padding:12px 16px 0;flex-shrink:0"></div>
+  <div id="catalogo-content" style="flex:1;overflow-y:auto;padding:12px 16px"></div>
+</div>
+
+<!-- Popup de aviso: producto(s) nuevo(s) en el catálogo -->
+<div id="lanz-popup" style="display:none;position:fixed;inset:0;background:#0007;z-index:4000;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:14px;overflow:hidden;max-width:380px;width:100%;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:stretch">
+      <div style="flex:1;padding:18px 16px;display:flex;flex-direction:column;justify-content:center;min-width:0">
+        <div style="font-size:11px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">🎉 Producto nuevo</div>
+        <div id="lanz-popup-nombre" style="font-size:15px;font-weight:800;color:#202124;margin-bottom:4px"></div>
+        <div id="lanz-popup-rubro" style="font-size:11px;color:#9aa0a6;margin-bottom:8px"></div>
+        <div id="lanz-popup-desc" style="font-size:11.5px;color:#5f6368;line-height:1.4"></div>
+      </div>
+      <img id="lanz-popup-img" src="" style="width:120px;object-fit:cover;flex-shrink:0" alt="">
+    </div>
+    <div style="display:flex;border-top:1px solid #f1f3f4">
+      <button onclick="lanzPopupCerrar()" style="flex:1;padding:12px;border:none;background:#fff;color:#5f6368;font-weight:700;font-size:12.5px;cursor:pointer">Cerrar</button>
+      <button onclick="lanzPopupVerCatalogo()" style="flex:1;padding:12px;border:none;background:#188038;color:#fff;font-weight:700;font-size:12.5px;cursor:pointer">Ver catálogo</button>
+    </div>
+  </div>
+</div>
+
 </div>
 
 <div id="loading-overlay"><div class="spinner"></div></div>
@@ -910,6 +940,7 @@ function initAppForVendor(){
   initRutaDate();
   renderVendorObjetivos();
   initHdrCal();
+  lanzChequearPopup();
 }
 
 // ── UTILS ──
@@ -1304,6 +1335,160 @@ async function altaGuardarCliente(){
   }finally{
     btn.disabled = false; btn.textContent = 'Guardar Alta';
   }
+}
+
+// ── VENDEDOR: Catálogo de Lanzamientos ──
+var catalogoCache = [];
+var catalogoFiltroRubro = 'todos';
+
+function abrirCatalogo(){
+  switchTab('catalogo-lanzamientos');
+  catalogoCargar();
+}
+
+async function catalogoCargar(){
+  const el = document.getElementById('catalogo-content');
+  if(!el) return;
+  el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:20px 10px">Cargando catálogo...</div>';
+
+  try{
+    const { db, collection, getDocs, query, where, orderBy } = window.fb;
+    const q = query(collection(db,'lanzamientos'), where('activo','==',true), orderBy('fecha_publicacion','desc'));
+    const snap = await getDocs(q);
+
+    catalogoCache = [];
+    snap.forEach(docSnap=>{ catalogoCache.push(Object.assign({id:docSnap.id}, docSnap.data())); });
+
+    catalogoRenderFiltros();
+    catalogoRenderGrid();
+  }catch(err){
+    console.error('[catalogoCargar]', err);
+    el.innerHTML = '<div style="text-align:center;color:#ea4335;font-size:12.5px;padding:20px 10px">Error al cargar el catálogo: '+(err.message||err)+'</div>';
+  }
+}
+
+function catalogoRenderFiltros(){
+  const el = document.getElementById('catalogo-filtros');
+  if(!el) return;
+  const rubrosPresentes = Array.from(new Set(catalogoCache.map(l=>l.rubro).filter(Boolean)));
+  if(rubrosPresentes.length<=1){ el.innerHTML=''; return; } // no vale la pena mostrar filtro si hay 1 solo rubro o ninguno
+
+  const opciones = ['todos'].concat(rubrosPresentes);
+  el.innerHTML = opciones.map(function(r){
+    const activo = catalogoFiltroRubro===r;
+    const label = r==='todos' ? 'Todos' : r;
+    return '<button onclick="catalogoSetFiltro(\''+r.replace(/'/g,"\\'")+'\')" style="font-size:10.5px;padding:5px 10px;border:1.5px solid #188038;color:'+(activo?'#fff':'#188038')+';background:'+(activo?'#188038':'#fff')+';border-radius:14px;cursor:pointer;font-weight:700;white-space:nowrap">'+label+'</button>';
+  }).join('');
+}
+
+function catalogoSetFiltro(r){
+  catalogoFiltroRubro = r;
+  catalogoRenderFiltros();
+  catalogoRenderGrid();
+}
+
+function catalogoRenderGrid(){
+  const el = document.getElementById('catalogo-content');
+  if(!el) return;
+
+  const lista = catalogoFiltroRubro==='todos' ? catalogoCache : catalogoCache.filter(l=>l.rubro===catalogoFiltroRubro);
+
+  if(!lista.length){
+    el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:20px 10px">Todavía no hay lanzamientos publicados.</div>';
+    return;
+  }
+
+  let html = '';
+  lista.forEach(l=>{
+    html += `<div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;overflow:hidden;margin-bottom:12px;display:flex">
+      <img src="" data-catalogo-img="${l.imagen_path}" style="width:100px;height:100px;object-fit:cover;flex-shrink:0;background:#f1f3f4" alt="">
+      <div style="padding:10px 12px;min-width:0;flex:1">
+        <div style="font-size:9.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.4px">${l.rubro||''}</div>
+        <div style="font-size:13.5px;font-weight:700;color:#202124;margin:2px 0">${l.producto||''}</div>
+        <div style="font-size:11px;color:#5f6368;line-height:1.35;margin-bottom:4px">${l.descripcion||''}</div>
+        <div style="font-size:10px;color:#9aa0a6">SKU ${l.sku||''} · UMV ${l.umv||''} · x${l.cantidad_x_bulto!=null?l.cantidad_x_bulto:'—'}</div>
+      </div>
+    </div>`;
+  });
+  el.innerHTML = html;
+
+  lista.forEach(l=>{ catalogoCargarThumb(l.imagen_path); });
+}
+
+async function catalogoCargarThumb(path){
+  if(!path) return;
+  try{
+    const { storage, ref, getBytes } = window.fb;
+    const bytes = await getBytes(ref(storage, path));
+    const blob = new Blob([bytes]);
+    const url = URL.createObjectURL(blob);
+    document.querySelectorAll('img[data-catalogo-img="'+CSS.escape(path)+'"]').forEach(img=>{ img.src = url; });
+  }catch(err){
+    console.error('[catalogoCargarThumb]', err);
+  }
+}
+
+// ── VENDEDOR: Popup de aviso de producto nuevo ──
+var lanzPopupActual = null; // guarda el lanzamiento que se le mostró al vendedor, para marcarlo como visto
+
+async function lanzChequearPopup(){
+  try{
+    const { db, collection, getDocs, query, where, orderBy, doc, getDoc } = window.fb;
+
+    const q = query(collection(db,'lanzamientos'), where('activo','==',true), orderBy('fecha_publicacion','desc'));
+    const snap = await getDocs(q);
+    if(snap.empty) return;
+    const ultimo = Object.assign({id:snap.docs[0].id}, snap.docs[0].data());
+    if(!ultimo.fecha_publicacion || typeof ultimo.fecha_publicacion.toMillis !== 'function') return; // el serverTimestamp todavía no resolvió, no pasa nada, se muestra en el próximo login
+
+    const code = getVendorCode();
+    const vistoSnap = await getDoc(doc(db,'vendedor_lanzamientos_visto',code));
+    const vistoData = vistoSnap.exists() ? vistoSnap.data() : null;
+    const yaVioEsteONuevo = vistoData && vistoData.ultima_fecha_vista
+      && typeof vistoData.ultima_fecha_vista.toMillis === 'function'
+      && vistoData.ultima_fecha_vista.toMillis() >= ultimo.fecha_publicacion.toMillis();
+
+    if(yaVioEsteONuevo) return;
+
+    lanzPopupActual = ultimo;
+    document.getElementById('lanz-popup-nombre').textContent = ultimo.producto || '';
+    document.getElementById('lanz-popup-rubro').textContent = ultimo.rubro || '';
+    document.getElementById('lanz-popup-desc').textContent = ultimo.descripcion || '';
+    document.getElementById('lanz-popup-img').src = '';
+    if(ultimo.imagen_path){
+      const { storage, ref, getBytes } = window.fb;
+      getBytes(ref(storage, ultimo.imagen_path)).then(function(bytes){
+        const url = URL.createObjectURL(new Blob([bytes]));
+        document.getElementById('lanz-popup-img').src = url;
+      }).catch(function(err){ console.error('[lanzChequearPopup] imagen', err); });
+    }
+    document.getElementById('lanz-popup').style.display = 'flex';
+  }catch(err){
+    console.error('[lanzChequearPopup]', err);
+  }
+}
+
+async function lanzMarcarVisto(){
+  if(!lanzPopupActual) return;
+  try{
+    const { db, doc, setDoc, serverTimestamp } = window.fb;
+    const code = getVendorCode();
+    await setDoc(doc(db,'vendedor_lanzamientos_visto',code), { ultima_fecha_vista: serverTimestamp() }, {merge:true});
+  }catch(err){
+    console.error('[lanzMarcarVisto]', err);
+  }
+  lanzPopupActual = null;
+}
+
+function lanzPopupCerrar(){
+  document.getElementById('lanz-popup').style.display = 'none';
+  lanzMarcarVisto();
+}
+
+function lanzPopupVerCatalogo(){
+  document.getElementById('lanz-popup').style.display = 'none';
+  lanzMarcarVisto();
+  abrirCatalogo();
 }
 
 function switchTab(tab){
@@ -2704,7 +2889,7 @@ function adminPopulateFilters(){
 
 function adminSetTab(t){
   adminTab=t;
-  ['ruta','comparativa','cambios','altas'].forEach(function(tt){
+  ['ruta','comparativa','cambios','altas','lanzamientos'].forEach(function(tt){
     const btn=document.getElementById('admin-tab-'+tt);
     if(btn){
       btn.style.borderBottomColor = tt===t ? '#2c3e50' : 'transparent';
@@ -2717,6 +2902,7 @@ function adminSetTab(t){
   if(t==='cambios'){ adminBuildCambiosLog(); }
   if(t==='comparativa'){ setTimeout(()=>adminBuildComparativa(),50); }
   if(t==='altas'){ adminCargarAltas(); }
+  if(t==='lanzamientos'){ lanzInitForm(); lanzCargarLista(); }
 }
 
 function initAdminMap(){
@@ -3271,6 +3457,154 @@ async function adminExportAltaPDF(id){
   }catch(err){
     console.error('[adminExportAltaPDF]', err);
     alert('Error al generar el PDF: '+(err.message||err));
+  }
+}
+
+// ── ADMIN: Lanzamientos de productos ──
+const RUBROS_LANZAMIENTOS = ['GOLOSINAS','CHOCOLATES','CHOCOLATES ARCOR J.V.','HARINAS','ALIMENTOS','HELADOS',
+  'CHOCOLATES BAGLEY JV','HARINAS BAGLEY','CONGELADOS','COMESTIBLES LA CAMPAGNOLA','PANIFICADOS CONGELADOS','NUTRICION'];
+var lanzListaCache = [];
+var lanzFormInicializado = false;
+
+function lanzInitForm(){
+  if(lanzFormInicializado) return; // el <select> solo se arma una vez, no hace falta rehacerlo cada vez que se abre la pestaña
+  var sel = document.getElementById('lanz-rubro');
+  RUBROS_LANZAMIENTOS.forEach(function(r){
+    var op = document.createElement('option');
+    op.value = r; op.textContent = r;
+    sel.appendChild(op);
+  });
+  lanzFormInicializado = true;
+}
+
+async function lanzPublicar(){
+  var errEl = document.getElementById('lanz-error');
+  errEl.style.display = 'none';
+  var val = function(id){ return (document.getElementById(id).value||'').trim(); };
+  var archivo = document.getElementById('lanz-imagen').files[0];
+
+  var faltantes = [];
+  if(!val('lanz-sku')) faltantes.push('SKU / Código');
+  if(!val('lanz-producto')) faltantes.push('Producto');
+  if(!val('lanz-rubro')) faltantes.push('Rubro');
+  if(!val('lanz-umv')) faltantes.push('UMV');
+  if(!val('lanz-cant-bulto')) faltantes.push('Cantidad x Bulto');
+  if(!val('lanz-precio')) faltantes.push('Precio s/IVA');
+  if(!val('lanz-fecha-ingreso')) faltantes.push('Fecha de ingreso');
+  if(!val('lanz-cant-ingresada')) faltantes.push('Cantidad ingresada');
+  if(!archivo) faltantes.push('Imagen del producto');
+
+  if(faltantes.length){
+    errEl.style.display = 'block';
+    errEl.textContent = 'Faltan completar estos campos:\n• '+faltantes.join('\n• ');
+    return;
+  }
+
+  var btn = document.getElementById('lanz-btn-publicar');
+  btn.disabled = true; btn.textContent = 'Publicando...';
+
+  try{
+    const { storage, ref, uploadBytes, db, collection, addDoc, serverTimestamp } = window.fb;
+
+    var nombreArchivo = 'lanzamientos_imagenes/'+Date.now()+'_'+val('lanz-sku')+'_'+archivo.name;
+    await uploadBytes(ref(storage, nombreArchivo), archivo);
+
+    await addDoc(collection(db,'lanzamientos'), {
+      sku: val('lanz-sku'), producto: val('lanz-producto'), descripcion: val('lanz-descripcion'),
+      rubro: val('lanz-rubro'), umv: val('lanz-umv'),
+      cantidad_x_bulto: parseFloat(val('lanz-cant-bulto')), precio_sin_iva: parseFloat(val('lanz-precio')),
+      fecha_ingreso: val('lanz-fecha-ingreso'), cantidad_ingresada: parseFloat(val('lanz-cant-ingresada')),
+      reemplaza_codigo: val('lanz-reemplaza'), imagen_path: nombreArchivo,
+      activo: true, publicado_por: currentAdmin || '',
+      fecha_publicacion: serverTimestamp()
+    });
+
+    // Limpiar el formulario para el próximo lanzamiento
+    ['lanz-sku','lanz-producto','lanz-descripcion','lanz-umv','lanz-cant-bulto','lanz-precio',
+     'lanz-fecha-ingreso','lanz-cant-ingresada','lanz-reemplaza'].forEach(function(id){
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('lanz-rubro').value = '';
+    document.getElementById('lanz-imagen').value = '';
+
+    alert('✅ Lanzamiento publicado. Ya aparece en el catálogo de los vendedores.');
+    lanzCargarLista();
+  }catch(err){
+    console.error('[lanzPublicar]', err);
+    errEl.style.display = 'block';
+    errEl.textContent = 'Error al publicar: '+(err.message||err);
+  }finally{
+    btn.disabled = false; btn.textContent = 'Publicar Lanzamiento';
+  }
+}
+
+async function lanzCargarLista(){
+  const el = document.getElementById('lanz-lista-content');
+  if(!el) return;
+  el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px 10px">Cargando...</div>';
+
+  try{
+    const { db, collection, getDocs, query, orderBy } = window.fb;
+    const q = query(collection(db,'lanzamientos'), orderBy('fecha_publicacion','desc'));
+    const snap = await getDocs(q);
+
+    lanzListaCache = [];
+    snap.forEach(docSnap=>{ lanzListaCache.push(Object.assign({id:docSnap.id}, docSnap.data())); });
+
+    if(!lanzListaCache.length){
+      el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px 10px">Todavía no publicaste ningún lanzamiento.</div>';
+      return;
+    }
+
+    let html = '';
+    lanzListaCache.forEach(l=>{
+      const activo = l.activo!==false;
+      html += `<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:14px 16px;margin-bottom:10px;display:flex;gap:14px;align-items:flex-start${activo?'':';opacity:.55'}">
+        <img src="" data-lanz-img="${l.imagen_path}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:#f1f3f4;flex-shrink:0" alt="">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <div style="font-size:13.5px;font-weight:700;color:#2c3e50">${l.producto||''}</div>
+            <span style="font-size:9.5px;font-weight:700;color:#fff;background:${activo?'#188038':'#80868b'};border-radius:10px;padding:2px 8px">${activo?'Activo':'Archivado'}</span>
+          </div>
+          <div style="font-size:11px;color:#9aa0a6;margin-bottom:4px">SKU ${l.sku||''} · ${l.rubro||''}</div>
+          <div style="font-size:11.5px;color:#5f6368">UMV ${l.umv||''} · x${l.cantidad_x_bulto!=null?l.cantidad_x_bulto:'—'} · $${l.precio_sin_iva!=null?l.precio_sin_iva:'—'} s/IVA · ingreso ${l.fecha_ingreso||''}</div>
+        </div>
+        <button onclick="lanzToggleActivo('${l.id}', ${activo})" style="font-size:11px;padding:6px 12px;border:1px solid #dadce0;color:#5f6368;background:#fff;border-radius:6px;cursor:pointer;font-weight:700;white-space:nowrap">${activo?'Archivar':'Reactivar'}</button>
+      </div>`;
+    });
+    el.innerHTML = html;
+
+    // Cargar las miniaturas de a una (evita bloquear el render de la lista mientras bajan)
+    lanzListaCache.forEach(l=>{ lanzCargarThumb(l.imagen_path); });
+  }catch(err){
+    console.error('[lanzCargarLista]', err);
+    el.innerHTML = '<div style="text-align:center;color:#ea4335;font-size:12.5px;padding:16px 10px">Error al cargar los lanzamientos: '+(err.message||err)+'</div>';
+  }
+}
+
+async function lanzCargarThumb(path){
+  if(!path) return;
+  try{
+    const { storage, ref, getBytes } = window.fb;
+    const bytes = await getBytes(ref(storage, path));
+    const blob = new Blob([bytes]);
+    const url = URL.createObjectURL(blob);
+    document.querySelectorAll('img[data-lanz-img="'+CSS.escape(path)+'"]').forEach(img=>{ img.src = url; });
+  }catch(err){
+    console.error('[lanzCargarThumb]', err);
+  }
+}
+
+async function lanzToggleActivo(id, estabaActivo){
+  const accion = estabaActivo ? 'archivar' : 'reactivar';
+  if(!confirm('¿Confirmás '+accion+' este lanzamiento?')) return;
+  try{
+    const { db, doc, setDoc } = window.fb;
+    await setDoc(doc(db,'lanzamientos',id), { activo: !estabaActivo }, {merge:true});
+    lanzCargarLista();
+  }catch(err){
+    console.error('[lanzToggleActivo]', err);
+    alert('Error al actualizar: '+(err.message||err));
   }
 }
 
@@ -4834,6 +5168,7 @@ function supRenderHelados(data){
     <button id="admin-tab-comparativa" onclick="adminSetTab('comparativa')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b">COMPARATIVA</button>
     <button id="admin-tab-cambios" onclick="adminSetTab('cambios')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b">CAMBIOS</button>
     <button id="admin-tab-altas" onclick="adminSetTab('altas')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b">ALTAS</button>
+    <button id="admin-tab-lanzamientos" onclick="adminSetTab('lanzamientos')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b">LANZAMIENTOS</button>
   </div>
   <!-- RUTA panel: sidebar + map -->
   <div id="admin-panel-ruta" style="display:flex;flex:1;overflow:hidden">
@@ -4946,6 +5281,79 @@ function supRenderHelados(data){
       </div>
     </div>
     <div id="admin-altas-content" style="flex:1;overflow-y:auto;padding:14px 16px"></div>
+  </div>
+
+  <!-- LANZAMIENTOS: catálogo de productos nuevos, publicado por el Admin -->
+  <div id="admin-panel-lanzamientos" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+    <div style="flex:1;overflow-y:auto;padding:14px 16px">
+
+      <!-- Formulario de carga -->
+      <div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:16px;margin-bottom:16px">
+        <div style="font-size:12.5px;font-weight:800;color:#2c3e50;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">Publicar nuevo lanzamiento</div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+          <div>
+            <label class="alta-lbl">SKU / Código *</label>
+            <input type="text" id="lanz-sku" class="alta-input">
+          </div>
+          <div>
+            <label class="alta-lbl">Producto *</label>
+            <input type="text" id="lanz-producto" class="alta-input">
+          </div>
+        </div>
+
+        <label class="alta-lbl">Descripción</label>
+        <textarea id="lanz-descripcion" class="alta-input" rows="3" style="resize:vertical"></textarea>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+          <div>
+            <label class="alta-lbl">Rubro *</label>
+            <select id="lanz-rubro" class="alta-input">
+              <option value="">Seleccionar...</option>
+            </select>
+          </div>
+          <div>
+            <label class="alta-lbl">UMV *</label>
+            <input type="text" id="lanz-umv" class="alta-input" placeholder="Ej: Unidad, Kg, Caja">
+          </div>
+          <div>
+            <label class="alta-lbl">Cantidad x Bulto *</label>
+            <input type="number" id="lanz-cant-bulto" class="alta-input">
+          </div>
+          <div>
+            <label class="alta-lbl">Precio s/IVA *</label>
+            <input type="number" step="0.01" id="lanz-precio" class="alta-input">
+          </div>
+          <div>
+            <label class="alta-lbl">Fecha de ingreso *</label>
+            <input type="date" id="lanz-fecha-ingreso" class="alta-input">
+          </div>
+          <div>
+            <label class="alta-lbl">Cantidad ingresada *</label>
+            <input type="number" id="lanz-cant-ingresada" class="alta-input">
+          </div>
+          <div>
+            <label class="alta-lbl">Reemplaza código (opcional)</label>
+            <input type="text" id="lanz-reemplaza" class="alta-input">
+          </div>
+          <div>
+            <label class="alta-lbl">Imagen del producto *</label>
+            <input type="file" id="lanz-imagen" class="alta-input" accept="image/*" style="border-style:dashed;background:#f8f9fa">
+          </div>
+        </div>
+
+        <div id="lanz-error" style="display:none;background:#fce8e6;color:#c5221f;border-radius:8px;padding:10px 12px;font-size:12px;margin-top:12px;white-space:pre-line"></div>
+
+        <button id="lanz-btn-publicar" onclick="lanzPublicar()" style="width:100%;margin-top:14px;background:#188038;color:#fff;border:none;border-radius:8px;padding:12px;font-weight:700;font-size:13px;cursor:pointer">Publicar Lanzamiento</button>
+      </div>
+
+      <!-- Lista de lanzamientos ya publicados -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div id="lanz-lista-titulo" style="font-size:12.5px;font-weight:800;color:#2c3e50;text-transform:uppercase;letter-spacing:.5px">Lanzamientos publicados</div>
+        <button onclick="lanzCargarLista()" style="font-size:11px;padding:6px 12px;border:1.5px solid #2c3e50;color:#2c3e50;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">🔄 Actualizar</button>
+      </div>
+      <div id="lanz-lista-content"></div>
+    </div>
   </div>
 
   <!-- IMPORT MODAL (Maestro de clientes + Hoja de reparto) -->
