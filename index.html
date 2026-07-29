@@ -41,6 +41,8 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
 #content{flex:1;overflow:hidden;display:flex;flex-direction:column;position:relative}
 .panel{display:none !important;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:env(safe-area-inset-bottom,0px)}
 .panel.active{display:flex !important;flex-direction:column}
+.alta-lbl{display:block;font-size:10.5px;font-weight:700;color:#5f6368;margin:10px 0 4px}
+.alta-input{width:100%;padding:9px 10px;border:1.5px solid #e8eaed;border-radius:8px;font-size:12.5px;font-family:inherit;background:#fff}
 
 /* ── RESUMEN PANEL ── */
 #panel-resumen{padding:16px}
@@ -125,9 +127,9 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getAuth, signInWithEmailAndPassword, signOut, getIdTokenResult }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc, writeBatch, getDoc }
+  import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc, writeBatch, getDoc, addDoc, serverTimestamp, query, where, orderBy }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-  import { getStorage, ref, getBytes }
+  import { getStorage, ref, getBytes, uploadBytes }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
   const firebaseConfig = {
@@ -144,7 +146,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
   const db = getFirestore(app);
   const storage = getStorage(app);
 
-  window.fb = { auth, db, storage, signInWithEmailAndPassword, signOut, getIdTokenResult, collection, getDocs, ref, getBytes, doc, setDoc, deleteDoc, writeBatch, getDoc };
+  window.fb = { auth, db, storage, signInWithEmailAndPassword, signOut, getIdTokenResult, collection, getDocs, ref, getBytes, doc, setDoc, deleteDoc, writeBatch, getDoc, addDoc, serverTimestamp, query, where, orderBy, uploadBytes };
   window.fbReady = true;
 </script>
 
@@ -301,7 +303,12 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
     <button id="obj-toggle-ab" onclick="setObjView('ambos')"  style="flex:1;padding:6px;border-radius:8px;border:2px solid #e8eaed;background:#fff;color:#5f6368;font-weight:700;font-size:12px;cursor:pointer">Ambos</button>
     <button id="obj-seg-helados" onclick="setObjSegment('helados')" style="display:none;flex:1;padding:6px;border-radius:8px;border:2px solid #e8eaed;background:#fff;color:#5f6368;font-weight:700;font-size:12px;cursor:pointer">🧊 Helados</button>
   </div>
-  <div id="obj-kpi-vendor" style="background:#f8f9fa;border-bottom:1px solid #e8eaed;padding:10px 14px;display:flex;gap:10px;overflow-x:auto;flex-shrink:0;-webkit-overflow-scrolling:touch"></div>
+  <!-- KPI toggle -->
+  <div onclick="objToggleKpis()" style="background:#fff;border-bottom:1px solid #e8eaed;padding:6px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;flex-shrink:0">
+    <span style="font-size:11px;font-weight:700;color:#5f6368">📊 Resumen</span>
+    <span id="obj-kpis-arrow" style="font-size:11px;color:#5f6368;font-weight:700">▾ Ocultar</span>
+  </div>
+  <div id="obj-kpi-vendor" style="background:#f8f9fa;border-bottom:1px solid #e8eaed;padding:10px 14px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;flex-shrink:0"></div>
   <div id="obj-rubros-vendor" style="flex:1;min-height:0;overflow-y:scroll;-webkit-overflow-scrolling:touch;padding:12px 14px 80px 14px;display:flex;flex-direction:column;gap:10px"></div>
 </div>
 
@@ -393,7 +400,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
       </div>
     </div>
 
-    <div onclick="oficinaProximamente('Alta Nuevo Cliente')" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
+    <div onclick="abrirAltaCliente()" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
       <span style="font-size:22px">➕</span>
       <div>
         <div style="font-size:13px;font-weight:700;color:#202124">Alta Nuevo Cliente</div>
@@ -427,6 +434,192 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
       </div>
     </a>
 
+  </div>
+</div>
+
+<!-- ALTA NUEVO CLIENTE -->
+<div class="panel" id="panel-alta-cliente" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
+  <div style="background:#188038;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+    <span onclick="switchTab('oficina')" style="color:#fff;font-size:20px;cursor:pointer;padding:2px 6px">←</span>
+    <div>
+      <div style="color:#fff;font-weight:800;font-size:14px">➕ Alta Nuevo Cliente</div>
+      <div style="color:#c8e6c9;font-size:11px">Completá los datos del punto de venta</div>
+    </div>
+  </div>
+
+  <div id="alta-form-wrap" style="flex:1;min-height:0;overflow-y:scroll;-webkit-overflow-scrolling:touch;padding:14px 14px 90px">
+
+    <!-- Datos del vendedor (automático) -->
+    <div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:12px 14px;margin-bottom:12px">
+      <div style="font-size:9.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Datos del vendedor</div>
+      <div style="font-size:12px;color:#5f6368" id="alta-vendedor-info"></div>
+    </div>
+
+    <!-- Datos del cliente -->
+    <div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:12px 14px;margin-bottom:12px">
+      <div style="font-size:9.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Datos del cliente</div>
+
+      <label class="alta-lbl">Nombre del cliente *</label>
+      <input type="text" id="alta-nombre" class="alta-input" placeholder="Ej: Kiosco Don José">
+
+      <label class="alta-lbl">Dirección completa *</label>
+      <input type="text" id="alta-direccion" class="alta-input" placeholder="Calle, número, localidad">
+
+      <label class="alta-lbl">Localidad *</label>
+      <select id="alta-localidad" class="alta-input">
+        <option value="">Elegir...</option>
+        <option>José C. Paz</option>
+        <option>San Miguel</option>
+        <option>Bella Vista</option>
+      </select>
+
+      <label class="alta-lbl">CUIL / CUIT / DNI *</label>
+      <input type="number" id="alta-cuit" class="alta-input" placeholder="Solo números">
+
+      <label class="alta-lbl">Categoría de IVA *</label>
+      <select id="alta-categoria-iva" class="alta-input">
+        <option value="">Elegir...</option>
+        <option>Responsable Inscripto</option>
+        <option>Responsable Monotributista</option>
+        <option>No categorizado</option>
+        <option>Exento</option>
+        <option>Consumidor Final</option>
+      </select>
+
+      <label class="alta-lbl">Adjuntar documentación (constancia de CUIT/CUIL/DNI) *</label>
+      <input type="file" id="alta-documentacion" class="alta-input" accept="image/*,application/pdf" style="border-style:dashed;background:#f8f9fa">
+    </div>
+
+    <!-- Datos del PDV -->
+    <div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:12px 14px;margin-bottom:12px">
+      <div style="font-size:9.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Datos del PDV</div>
+
+      <label class="alta-lbl">Canal *</label>
+      <select id="alta-canal" class="alta-input" onchange="altaToggleOtro('alta-canal','alta-canal-otro')">
+        <option value="">Elegir...</option>
+        <option>Kioscos</option>
+        <option>Almacenes</option>
+        <option>Autoservicios</option>
+        <option>No tradicionales</option>
+        <option>EESS</option>
+        <option>Establecimientos Educativos</option>
+        <option>Otro</option>
+      </select>
+      <input type="text" id="alta-canal-otro" class="alta-input" placeholder="Aclarar canal" style="display:none">
+
+      <label class="alta-lbl">Categoría *</label>
+      <select id="alta-categoria-pdv" class="alta-input">
+        <option value="">Elegir...</option>
+        <option>Elite</option>
+        <option>NP</option>
+        <option>N3 Alto</option>
+        <option>N3 Bajo</option>
+        <option>N4 Alto</option>
+        <option>N4 Bajo</option>
+      </select>
+
+      <label class="alta-lbl">Lista de precios *</label>
+      <select id="alta-lista-precios" class="alta-input" onchange="altaToggleOtro('alta-lista-precios','alta-lista-precios-otro')">
+        <option value="">Elegir...</option>
+        <option>Minorista</option>
+        <option>Autoservicio</option>
+        <option>Petrolera</option>
+        <option>Club Arcor</option>
+        <option>Otra</option>
+      </select>
+      <input type="text" id="alta-lista-precios-otro" class="alta-input" placeholder="Aclarar lista" style="display:none">
+
+      <label class="alta-lbl">Nombre del Dueño / Comprador *</label>
+      <input type="text" id="alta-dueno" class="alta-input">
+
+      <label class="alta-lbl">Contacto - Celular</label>
+      <input type="number" id="alta-celular" class="alta-input" placeholder="Sin 0 ni 15">
+
+      <label class="alta-lbl">Contacto - Mail</label>
+      <input type="email" id="alta-mail" class="alta-input">
+    </div>
+
+    <!-- Datos de visita y entrega -->
+    <div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:12px 14px;margin-bottom:12px">
+      <div style="font-size:9.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Datos de visita y entrega</div>
+
+      <label class="alta-lbl">Coordenadas del cliente *</label>
+      <button onclick="altaUsarUbicacion()" type="button" style="width:100%;padding:9px;border:1.5px solid #188038;background:#e6f4ea;color:#188038;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;margin-bottom:8px">📍 Usar mi ubicación actual</button>
+      <div id="alta-map" style="width:100%;height:200px;border-radius:8px;border:1px solid #e8eaed;margin-bottom:4px;display:none"></div>
+      <div id="alta-coords-txt" style="font-size:10.5px;color:#80868b;margin-bottom:8px">Todavía no se cargó ninguna ubicación.</div>
+
+      <label class="alta-lbl">Transportista *</label>
+      <select id="alta-transportista" class="alta-input" onchange="altaToggleOtro('alta-transportista','alta-transportista-otro')">
+        <option value="">Elegir...</option>
+        <option>T01 - Abyg</option>
+        <option>T02 - Coto</option>
+        <option>T03 - Balverde</option>
+        <option>T14 - Suarez</option>
+        <option>T18 - Astudillo</option>
+        <option>Otro</option>
+      </select>
+      <input type="text" id="alta-transportista-otro" class="alta-input" placeholder="Aclarar transportista" style="display:none">
+
+      <label class="alta-lbl">Horario de entrega *</label>
+      <select id="alta-horario" class="alta-input">
+        <option value="">Elegir...</option>
+        <option>07:00 a 10:00</option>
+        <option>07:00 a 12:00</option>
+        <option>07:00 a 14:00</option>
+        <option>07:00 a 16:00</option>
+        <option>09:00 a 14:00</option>
+        <option>09:00 a 18:00</option>
+        <option>10:00 a 14:00</option>
+        <option>10:00 a 18:00</option>
+        <option>14:00 a 18:00</option>
+      </select>
+
+      <div style="background:#f8f9fa;border-radius:8px;padding:10px;margin:10px 0" id="alta-vendedor-alta-box">
+        <div style="font-size:10.5px;font-weight:700;color:#202124;margin-bottom:6px">Vendedor que da el alta: <span id="alta-vendedor-alta-nombre" style="color:#188038"></span></div>
+        <label class="alta-lbl">Día de visita *</label>
+        <select id="alta-dia-alta" class="alta-input">
+          <option value="">Elegir...</option>
+          <option>Lunes</option><option>Martes</option><option>Miércoles</option>
+          <option>Jueves</option><option>Viernes</option><option>Sábado</option>
+        </select>
+        <label class="alta-lbl">Frecuencia *</label>
+        <select id="alta-frecuencia-alta" class="alta-input">
+          <option value="">Elegir...</option>
+          <option>Semanal</option><option>1 y 3 semana</option><option>2 y 4 semana</option>
+          <option>1 semana</option><option>2 semana</option><option>3 semana</option><option>4 semana</option>
+        </select>
+        <label class="alta-lbl">Orden de visita (0 a 50) *</label>
+        <input type="number" id="alta-orden-alta" class="alta-input" min="0" max="50">
+      </div>
+
+      <div style="background:#f8f9fa;border-radius:8px;padding:10px" id="alta-vendedor-companero-box">
+        <div style="font-size:10.5px;font-weight:700;color:#202124;margin-bottom:6px">Vendedor compañero: <span id="alta-vendedor-companero-nombre" style="color:#1565c0"></span></div>
+        <label class="alta-lbl">Día de visita *</label>
+        <select id="alta-dia-companero" class="alta-input">
+          <option value="">Elegir...</option>
+          <option>Lunes</option><option>Martes</option><option>Miércoles</option>
+          <option>Jueves</option><option>Viernes</option><option>Sábado</option>
+        </select>
+        <label class="alta-lbl">Frecuencia *</label>
+        <select id="alta-frecuencia-companero" class="alta-input">
+          <option value="">Elegir...</option>
+          <option>Semanal</option><option>1 y 3 semana</option><option>2 y 4 semana</option>
+          <option>1 semana</option><option>2 semana</option><option>3 semana</option><option>4 semana</option>
+        </select>
+        <label class="alta-lbl">Orden de visita (0 a 50) *</label>
+        <input type="number" id="alta-orden-companero" class="alta-input" min="0" max="50">
+      </div>
+    </div>
+
+    <!-- Observaciones -->
+    <div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:12px 14px;margin-bottom:12px">
+      <label class="alta-lbl" style="margin-top:0">Observaciones</label>
+      <textarea id="alta-observaciones" class="alta-input" rows="3" style="resize:vertical"></textarea>
+    </div>
+
+    <div id="alta-error" style="display:none;background:#fce8e6;color:#c5221f;border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:12px;white-space:pre-line"></div>
+
+    <button onclick="altaGuardarCliente()" id="alta-btn-guardar" style="width:100%;padding:12px;border:none;background:#188038;color:#fff;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">Guardar Alta</button>
   </div>
 </div>
 </div>
@@ -870,6 +1063,175 @@ let comparativaBuilt = false;
 
 function oficinaProximamente(nombre){
   alert('🚧 '+nombre+'\n\nEsta función todavía se está construyendo. Pronto vas a poder usarla desde acá.');
+}
+
+// ══════════════════════════════════════════════
+// ALTA NUEVO CLIENTE
+// ══════════════════════════════════════════════
+var altaMap = null, altaMarker = null, altaLat = null, altaLon = null;
+
+// Encuentra al "vendedor compañero": el otro vendedor (distinta cartera, Impulso/
+// Planificado) que atiende la MISMA zona que el vendedor logueado.
+function altaGetZonaYCompanero(){
+  var miZona = null;
+  var miRow = RAW_DATA.find(function(r){ return r.vend===currentVendor; });
+  if(miRow) miZona = miRow.zona;
+  var companero = null;
+  if(miZona){
+    var otro = RAW_DATA.find(function(r){ return r.zona===miZona && r.vend!==currentVendor; });
+    if(otro) companero = otro.vend;
+  }
+  return { zona: miZona, companero: companero };
+}
+
+function altaToggleOtro(selectId, otroId){
+  var sel = document.getElementById(selectId);
+  var otro = document.getElementById(otroId);
+  otro.style.display = (sel.value==='Otro') ? 'block' : 'none';
+  if(sel.value!=='Otro') otro.value='';
+}
+
+function abrirAltaCliente(){
+  // Reset del formulario
+  ['alta-nombre','alta-direccion','alta-cuit','alta-dueno','alta-celular','alta-mail',
+   'alta-orden-alta','alta-orden-companero','alta-observaciones','alta-canal-otro',
+   'alta-lista-precios-otro','alta-transportista-otro'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.value='';
+  });
+  ['alta-localidad','alta-categoria-iva','alta-canal','alta-categoria-pdv','alta-lista-precios',
+   'alta-transportista','alta-horario','alta-dia-alta','alta-frecuencia-alta','alta-dia-companero',
+   'alta-frecuencia-companero'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.value='';
+  });
+  document.getElementById('alta-documentacion').value='';
+  document.getElementById('alta-canal-otro').style.display='none';
+  document.getElementById('alta-lista-precios-otro').style.display='none';
+  document.getElementById('alta-transportista-otro').style.display='none';
+  document.getElementById('alta-error').style.display='none';
+  document.getElementById('alta-map').style.display='none';
+  document.getElementById('alta-coords-txt').textContent='Todavía no se cargó ninguna ubicación.';
+  altaLat=null; altaLon=null; altaMap=null; altaMarker=null;
+
+  var code = getVendorCode();
+  document.getElementById('alta-vendedor-info').textContent = 'Código '+code+' — '+currentVendor;
+
+  var zc = altaGetZonaYCompanero();
+  document.getElementById('alta-vendedor-alta-nombre').textContent = currentVendor;
+  document.getElementById('alta-vendedor-companero-nombre').textContent = zc.companero || 'No se encontró (revisar zona)';
+
+  switchTab('alta-cliente');
+}
+
+function altaUsarUbicacion(){
+  if(!navigator.geolocation){ alert('Tu navegador no soporta geolocalización.'); return; }
+  navigator.geolocation.getCurrentPosition(function(pos){
+    altaLat = pos.coords.latitude;
+    altaLon = pos.coords.longitude;
+    altaMostrarMapa();
+  }, function(err){
+    alert('No se pudo obtener tu ubicación: '+err.message+'\n\nRevisá que le hayas dado permiso de ubicación al navegador.');
+  }, {enableHighAccuracy:true, timeout:15000});
+}
+
+function altaMostrarMapa(){
+  var mapEl = document.getElementById('alta-map');
+  mapEl.style.display='block';
+  document.getElementById('alta-coords-txt').innerHTML = 'Lat: '+altaLat.toFixed(6)+' · Lon: '+altaLon.toFixed(6)+' <span style="color:#188038">(arrastrá el pin si hace falta ajustar)</span>';
+
+  setTimeout(function(){
+    if(!altaMap){
+      altaMap = L.map('alta-map',{zoomControl:true}).setView([altaLat,altaLon],17);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}).addTo(altaMap);
+      altaMarker = L.marker([altaLat,altaLon],{draggable:true}).addTo(altaMap);
+      altaMarker.on('dragend', function(){
+        var pos = altaMarker.getLatLng();
+        altaLat = pos.lat; altaLon = pos.lng;
+        document.getElementById('alta-coords-txt').innerHTML = 'Lat: '+altaLat.toFixed(6)+' · Lon: '+altaLon.toFixed(6)+' <span style="color:#188038">(ajustado a mano)</span>';
+      });
+    } else {
+      altaMap.setView([altaLat,altaLon],17);
+      altaMarker.setLatLng([altaLat,altaLon]);
+      altaMap.invalidateSize();
+    }
+  }, 80);
+}
+
+async function altaGuardarCliente(){
+  var errEl = document.getElementById('alta-error');
+  errEl.style.display='none';
+
+  var val = function(id){ return (document.getElementById(id).value||'').trim(); };
+  var canal = val('alta-canal')==='Otro' ? val('alta-canal-otro') : val('alta-canal');
+  var listaPrecios = val('alta-lista-precios')==='Otro' ? val('alta-lista-precios-otro') : val('alta-lista-precios');
+  var transportista = val('alta-transportista')==='Otro' ? val('alta-transportista-otro') : val('alta-transportista');
+  var archivo = document.getElementById('alta-documentacion').files[0];
+
+  var faltantes = [];
+  if(!val('alta-nombre')) faltantes.push('Nombre del cliente');
+  if(!val('alta-direccion')) faltantes.push('Dirección');
+  if(!val('alta-localidad')) faltantes.push('Localidad');
+  if(!val('alta-cuit')) faltantes.push('CUIL/CUIT/DNI');
+  if(!val('alta-categoria-iva')) faltantes.push('Categoría de IVA');
+  if(!archivo) faltantes.push('Documentación adjunta');
+  if(!canal) faltantes.push('Canal');
+  if(!val('alta-categoria-pdv')) faltantes.push('Categoría del PDV');
+  if(!listaPrecios) faltantes.push('Lista de precios');
+  if(!val('alta-dueno')) faltantes.push('Nombre del dueño/comprador');
+  if(altaLat===null || altaLon===null) faltantes.push('Coordenadas (usar mi ubicación)');
+  if(!transportista) faltantes.push('Transportista');
+  if(!val('alta-horario')) faltantes.push('Horario de entrega');
+  if(!val('alta-dia-alta')) faltantes.push('Día de visita (vendedor alta)');
+  if(!val('alta-frecuencia-alta')) faltantes.push('Frecuencia (vendedor alta)');
+  if(!val('alta-orden-alta')) faltantes.push('Orden de visita (vendedor alta)');
+  if(!val('alta-dia-companero')) faltantes.push('Día de visita (vendedor compañero)');
+  if(!val('alta-frecuencia-companero')) faltantes.push('Frecuencia (vendedor compañero)');
+  if(!val('alta-orden-companero')) faltantes.push('Orden de visita (vendedor compañero)');
+
+  if(faltantes.length){
+    errEl.style.display='block';
+    errEl.textContent = 'Faltan completar estos campos:\n• '+faltantes.join('\n• ');
+    return;
+  }
+
+  var btn = document.getElementById('alta-btn-guardar');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  try{
+    const { storage, ref, uploadBytes, db, collection, addDoc, serverTimestamp } = window.fb;
+    var zc = altaGetZonaYCompanero();
+    var code = getVendorCode();
+
+    // 1. Subir el adjunto a Storage
+    var nombreArchivo = 'altas_documentacion/'+Date.now()+'_'+code+'_'+archivo.name;
+    await uploadBytes(ref(storage, nombreArchivo), archivo);
+
+    // 2. Armar y guardar el documento en Firestore
+    var data = {
+      vendedor_code: code, vendedor_nombre: currentVendor,
+      zona: zc.zona || '', companero_nombre: zc.companero || '',
+      cliente_nombre: val('alta-nombre'), direccion: val('alta-direccion'), localidad: val('alta-localidad'),
+      cuit_dni: val('alta-cuit'), categoria_iva: val('alta-categoria-iva'), documentacion_path: nombreArchivo,
+      canal: canal, categoria_pdv: val('alta-categoria-pdv'), lista_precios: listaPrecios,
+      dueno_nombre: val('alta-dueno'), celular: val('alta-celular'), mail: val('alta-mail'),
+      lat: altaLat, lon: altaLon,
+      transportista: transportista, horario_entrega: val('alta-horario'),
+      dia_alta: val('alta-dia-alta'), frecuencia_alta: val('alta-frecuencia-alta'), orden_alta: parseInt(val('alta-orden-alta')),
+      dia_companero: val('alta-dia-companero'), frecuencia_companero: val('alta-frecuencia-companero'), orden_companero: parseInt(val('alta-orden-companero')),
+      observaciones: val('alta-observaciones'),
+      estado: 'pendiente',
+      fecha_creacion: serverTimestamp()
+    };
+    await addDoc(collection(db,'altas_pendientes'), data);
+
+    alert('✅ Alta guardada correctamente. Ya quedó registrada para que el Admin la revise.');
+    switchTab('oficina');
+  }catch(err){
+    console.error('[altaGuardarCliente]', err);
+    errEl.style.display='block';
+    errEl.textContent = 'Error al guardar: '+(err.message||err);
+  }finally{
+    btn.disabled = false; btn.textContent = 'Guardar Alta';
+  }
 }
 
 function switchTab(tab){
@@ -1489,10 +1851,10 @@ function renderVendorObjetivos(){
   }
 
   document.getElementById('obj-kpi-vendor').innerHTML=kpis.map(function(k){
-    return '<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:10px 14px;min-width:110px;flex-shrink:0;box-shadow:0 1px 3px #0001">'
-      +'<div style="font-size:9px;color:#80868b;font-weight:700;text-transform:uppercase;margin-bottom:3px">'+k.l+'</div>'
-      +'<div style="font-size:16px;font-weight:800;color:'+k.c+'">'+k.v+'</div>'
-      +(k.s?'<div style="font-size:10px;color:'+k.c+';font-weight:600">'+k.s+'</div>':'')
+    return '<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:8px 10px;min-width:0;box-shadow:0 1px 3px #0001">'
+      +'<div style="font-size:9px;color:#80868b;font-weight:700;text-transform:uppercase;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+k.l+'</div>'
+      +'<div style="font-size:14px;font-weight:800;color:'+k.c+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+k.v+'</div>'
+      +(k.s?'<div style="font-size:10px;color:'+k.c+';font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+k.s+'</div>':'')
       +'</div>';
   }).join('');
 
@@ -1600,10 +1962,10 @@ function renderHelados(){
   kpis.push({l:'Req./Freezer Imp', v:fmtVM(Math.abs(h.i_x_frz)), s:h.i_x_frz>=0?'a vender c/freezer':'ya cumplido', c:h.i_x_frz>=0?'#f57f17':'#2e7d32'});
 
   document.getElementById('obj-kpi-vendor').innerHTML=kpis.map(function(k){
-    return '<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:10px 14px;min-width:110px;flex-shrink:0;box-shadow:0 1px 3px #0001">'
-      +'<div style="font-size:9px;color:#80868b;font-weight:700;text-transform:uppercase;margin-bottom:3px">'+k.l+'</div>'
-      +'<div style="font-size:16px;font-weight:800;color:'+k.c+'">'+k.v+'</div>'
-      +(k.s?'<div style="font-size:10px;color:'+k.c+';font-weight:600">'+k.s+'</div>':'')
+    return '<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:8px 10px;min-width:0;box-shadow:0 1px 3px #0001">'
+      +'<div style="font-size:9px;color:#80868b;font-weight:700;text-transform:uppercase;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+k.l+'</div>'
+      +'<div style="font-size:14px;font-weight:800;color:'+k.c+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+k.v+'</div>'
+      +(k.s?'<div style="font-size:10px;color:'+k.c+';font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+k.s+'</div>':'')
       +'</div>';
   }).join('');
 
@@ -1820,6 +2182,13 @@ function mvToggleKpis(){
   mvKpisCollapsed = !mvKpisCollapsed;
   document.getElementById('mv-kpis').style.display = mvKpisCollapsed ? 'none' : 'grid';
   document.getElementById('mv-kpis-arrow').textContent = mvKpisCollapsed ? '▸ Mostrar' : '▾ Ocultar';
+}
+
+var objKpisCollapsed = false;
+function objToggleKpis(){
+  objKpisCollapsed = !objKpisCollapsed;
+  document.getElementById('obj-kpi-vendor').style.display = objKpisCollapsed ? 'none' : 'grid';
+  document.getElementById('obj-kpis-arrow').textContent = objKpisCollapsed ? '▸ Mostrar' : '▾ Ocultar';
 }
 
 function initMiVenta(){
@@ -2263,7 +2632,7 @@ function adminPopulateFilters(){
 
 function adminSetTab(t){
   adminTab=t;
-  ['ruta','comparativa','cambios'].forEach(function(tt){
+  ['ruta','comparativa','cambios','altas'].forEach(function(tt){
     const btn=document.getElementById('admin-tab-'+tt);
     if(btn){
       btn.style.borderBottomColor = tt===t ? '#2c3e50' : 'transparent';
@@ -2275,6 +2644,7 @@ function adminSetTab(t){
   if(t==='ruta'){ setTimeout(()=>{ if(adminMap) adminMap.invalidateSize(); },50); }
   if(t==='cambios'){ adminBuildCambiosLog(); }
   if(t==='comparativa'){ setTimeout(()=>adminBuildComparativa(),50); }
+  if(t==='altas'){ adminCargarAltas(); }
 }
 
 function initAdminMap(){
@@ -2525,6 +2895,79 @@ function adminClearAllMoves(){
   adminBuildCambiosLog();
   adminBuildRuta();
   adminSaveManualMovesFirestore();
+}
+
+// ── ADMIN: Altas de Cliente (Fase 1 — solo lectura) ──
+function adminFmtFechaAlta(ts){
+  // ts es un Firestore Timestamp (tiene .toDate()); si por algo llega null/undefined
+  // (ej. el doc recién se creó y el serverTimestamp todavía no resolvió), mostramos guion.
+  if(!ts || typeof ts.toDate !== 'function') return '—';
+  var d = ts.toDate();
+  var dd = String(d.getDate()).padStart(2,'0');
+  var mm = String(d.getMonth()+1).padStart(2,'0');
+  var hh = String(d.getHours()).padStart(2,'0');
+  var mi = String(d.getMinutes()).padStart(2,'0');
+  return dd+'/'+mm+'/'+d.getFullYear()+' '+hh+':'+mi;
+}
+
+async function adminCargarAltas(){
+  const el = document.getElementById('admin-altas-content');
+  const countEl = document.getElementById('admin-altas-count');
+  if(!el) return;
+  el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px 10px">Cargando altas...</div>';
+  if(countEl) countEl.textContent = '';
+
+  try{
+    const { db, collection, getDocs, query, where, orderBy } = window.fb;
+    const q = query(collection(db,'altas_pendientes'), where('estado','==','pendiente'), orderBy('fecha_creacion','desc'));
+    const snap = await getDocs(q);
+
+    if(countEl) countEl.textContent = snap.size + (snap.size===1 ? ' alta pendiente' : ' altas pendientes');
+
+    if(snap.empty){
+      el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px 10px">No hay altas pendientes por el momento.</div>';
+      return;
+    }
+
+    let html = '';
+    snap.forEach(docSnap=>{
+      const a = docSnap.data();
+      html += `<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:14px 16px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+          <div>
+            <div style="font-size:14px;font-weight:700;color:#2c3e50">${a.cliente_nombre||'(sin nombre)'}</div>
+            <div style="font-size:11px;color:#9aa0a6">${a.direccion||''}${a.localidad?(', '+a.localidad):''}</div>
+          </div>
+          <div style="font-size:10px;color:#9aa0a6;text-align:right;white-space:nowrap">${adminFmtFechaAlta(a.fecha_creacion)}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:11.5px;color:#5f6368;margin-bottom:8px">
+          <div><b>Vendedor:</b> ${a.vendedor_nombre||''} (${a.vendedor_code||''})</div>
+          <div><b>Zona:</b> ${a.zona||'—'}</div>
+          <div><b>CUIT/DNI:</b> ${a.cuit_dni||''}</div>
+          <div><b>Categoría IVA:</b> ${a.categoria_iva||''}</div>
+          <div><b>Canal:</b> ${a.canal||''}</div>
+          <div><b>Categoría PDV:</b> ${a.categoria_pdv||''}</div>
+          <div><b>Lista de precios:</b> ${a.lista_precios||''}</div>
+          <div><b>Transportista:</b> ${a.transportista||''}</div>
+          <div><b>Dueño/comprador:</b> ${a.dueno_nombre||''}</div>
+          <div><b>Contacto:</b> ${a.celular||''}${a.mail?(' · '+a.mail):''}</div>
+          <div><b>Coordenadas:</b> ${a.lat!=null && a.lon!=null ? a.lat.toFixed(5)+', '+a.lon.toFixed(5) : '—'}</div>
+          <div><b>Horario entrega:</b> ${a.horario_entrega||''}</div>
+        </div>
+        <div style="font-size:11.5px;color:#5f6368;margin-bottom:8px">
+          <b>Visita ${a.vendedor_nombre||'vendedor alta'}:</b> ${a.dia_alta||''} · ${a.frecuencia_alta||''} · orden ${a.orden_alta!=null?a.orden_alta:'—'}
+          &nbsp;&nbsp;|&nbsp;&nbsp;
+          <b>Visita ${a.companero_nombre||'compañero'}:</b> ${a.dia_companero||''} · ${a.frecuencia_companero||''} · orden ${a.orden_companero!=null?a.orden_companero:'—'}
+        </div>
+        ${a.observaciones ? `<div style="font-size:11.5px;color:#5f6368;margin-bottom:8px"><b>Observaciones:</b> ${a.observaciones}</div>` : ''}
+        <div style="font-size:10.5px;color:#9aa0a6">📎 ${a.documentacion_path ? a.documentacion_path.split('/').pop() : 'sin adjunto'}</div>
+      </div>`;
+    });
+    el.innerHTML = html;
+  }catch(err){
+    console.error('[adminCargarAltas]', err);
+    el.innerHTML = '<div style="text-align:center;color:#ea4335;font-size:12.5px;padding:16px 10px">Error al cargar las altas: '+(err.message||err)+'</div>';
+  }
 }
 
 function adminUndoClientEdit(editId){
@@ -4085,6 +4528,7 @@ function supRenderHelados(data){
     <button id="admin-tab-ruta" onclick="adminSetTab('ruta')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid #2c3e50;color:#2c3e50">RUTA</button>
     <button id="admin-tab-comparativa" onclick="adminSetTab('comparativa')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b">COMPARATIVA</button>
     <button id="admin-tab-cambios" onclick="adminSetTab('cambios')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b">CAMBIOS</button>
+    <button id="admin-tab-altas" onclick="adminSetTab('altas')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b">ALTAS</button>
   </div>
   <!-- RUTA panel: sidebar + map -->
   <div id="admin-panel-ruta" style="display:flex;flex:1;overflow:hidden">
@@ -4185,6 +4629,15 @@ function supRenderHelados(data){
       <button onclick="adminClearAllClientEdits()" style="font-size:11px;padding:6px 12px;border:1.5px solid #ea4335;color:#ea4335;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">Deshacer ediciones</button>
     </div>
     <div id="admin-cambios-content" style="flex:1;overflow-y:auto;padding:14px 16px"></div>
+  </div>
+
+  <!-- ALTAS DE CLIENTES (Fase 1: solo visualización) -->
+  <div id="admin-panel-altas" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+    <div style="background:#f8f9fa;border-bottom:1px solid #e8eaed;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+      <span style="font-size:11.5px;color:#5f6368;font-weight:700" id="admin-altas-count"></span>
+      <button onclick="adminCargarAltas()" style="font-size:11px;padding:6px 12px;border:1.5px solid #2c3e50;color:#2c3e50;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">🔄 Actualizar</button>
+    </div>
+    <div id="admin-altas-content" style="flex:1;overflow-y:auto;padding:14px 16px"></div>
   </div>
 
   <!-- IMPORT MODAL (Maestro de clientes + Hoja de reparto) -->
