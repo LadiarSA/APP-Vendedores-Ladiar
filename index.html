@@ -647,12 +647,40 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
         <div id="lanz-popup-rubro" style="font-size:11px;color:#9aa0a6;margin-bottom:8px"></div>
         <div id="lanz-popup-desc" style="font-size:11.5px;color:#5f6368;line-height:1.4"></div>
       </div>
-      <img id="lanz-popup-img" src="" style="width:120px;object-fit:cover;flex-shrink:0" alt="">
+      <img id="lanz-popup-img" src="" style="width:120px;object-fit:contain;flex-shrink:0;background:#f8f9fa" alt="">
     </div>
     <div style="display:flex;border-top:1px solid #f1f3f4">
       <button onclick="lanzPopupCerrar()" style="flex:1;padding:12px;border:none;background:#fff;color:#5f6368;font-weight:700;font-size:12.5px;cursor:pointer">Cerrar</button>
       <button onclick="lanzPopupVerCatalogo()" style="flex:1;padding:12px;border:none;background:#188038;color:#fff;font-weight:700;font-size:12.5px;cursor:pointer">Ver catálogo</button>
     </div>
+  </div>
+</div>
+
+<!-- Ficha completa de un lanzamiento (se abre al tocar una tarjeta del catálogo) -->
+<div id="lanz-ficha" style="display:none;position:fixed;inset:0;background:#0007;z-index:4100;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:14px;overflow:hidden;max-width:400px;width:100%;max-height:88vh;display:flex;flex-direction:column">
+    <div style="background:#188038;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+      <div style="flex:1;color:#fff;font-weight:800;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="lanz-ficha-nombre"></div>
+      <span onclick="lanzCerrarFicha()" style="color:#fff;font-size:20px;cursor:pointer;flex-shrink:0">✕</span>
+    </div>
+    <div style="overflow-y:auto;flex:1">
+      <img id="lanz-ficha-img" src="" style="width:100%;height:180px;object-fit:contain;background:#f8f9fa;display:block" alt="">
+      <div style="padding:16px">
+        <div id="lanz-ficha-rubro" style="font-size:10.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px"></div>
+        <div id="lanz-ficha-desc" style="font-size:12.5px;color:#5f6368;line-height:1.4;margin-bottom:12px"></div>
+        <table style="border-collapse:collapse;width:100%">
+          <tr><td style="padding:5px 10px 5px 0;color:#9aa0a6;font-size:11.5px;white-space:nowrap;vertical-align:top"><b>SKU</b></td><td id="lanz-ficha-sku" style="padding:5px 0;font-size:11.5px;color:#202124"></td></tr>
+          <tr><td style="padding:5px 10px 5px 0;color:#9aa0a6;font-size:11.5px;white-space:nowrap;vertical-align:top"><b>UMV</b></td><td id="lanz-ficha-umv" style="padding:5px 0;font-size:11.5px;color:#202124"></td></tr>
+          <tr><td style="padding:5px 10px 5px 0;color:#9aa0a6;font-size:11.5px;white-space:nowrap;vertical-align:top"><b>Cantidad x Bulto</b></td><td id="lanz-ficha-bulto" style="padding:5px 0;font-size:11.5px;color:#202124"></td></tr>
+          <tr><td style="padding:5px 10px 5px 0;color:#9aa0a6;font-size:11.5px;white-space:nowrap;vertical-align:top"><b>Precio s/IVA</b></td><td id="lanz-ficha-precio" style="padding:5px 0;font-size:11.5px;color:#202124"></td></tr>
+          <tr><td style="padding:5px 10px 5px 0;color:#9aa0a6;font-size:11.5px;white-space:nowrap;vertical-align:top"><b>Fecha de ingreso</b></td><td id="lanz-ficha-fecha" style="padding:5px 0;font-size:11.5px;color:#202124"></td></tr>
+          <tr><td style="padding:5px 10px 5px 0;color:#9aa0a6;font-size:11.5px;white-space:nowrap;vertical-align:top"><b>Cantidad ingresada</b></td><td id="lanz-ficha-cant-ingresada" style="padding:5px 0;font-size:11.5px;color:#202124"></td></tr>
+          <tr><td style="padding:5px 10px 5px 0;color:#9aa0a6;font-size:11.5px;white-space:nowrap;vertical-align:top"><b>Reemplaza código</b></td><td id="lanz-ficha-reemplaza" style="padding:5px 0;font-size:11.5px;color:#202124"></td></tr>
+          <tr><td style="padding:5px 10px 5px 0;color:#9aa0a6;font-size:11.5px;white-space:nowrap;vertical-align:top"><b>SIN TACC</b></td><td id="lanz-ficha-tacc" style="padding:5px 0;font-size:11.5px;color:#202124"></td></tr>
+        </table>
+      </div>
+    </div>
+    <button onclick="lanzCerrarFicha()" style="flex-shrink:0;padding:13px;border:none;border-top:1px solid #f1f3f4;background:#fff;color:#5f6368;font-weight:700;font-size:12.5px;cursor:pointer">Cerrar</button>
   </div>
 </div>
 
@@ -1400,13 +1428,13 @@ function catalogoRenderGrid(){
 
   let html = '';
   lista.forEach(l=>{
-    html += `<div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;overflow:hidden;margin-bottom:12px;display:flex">
-      <img src="" data-catalogo-img="${l.imagen_path}" style="width:100px;height:100px;object-fit:cover;flex-shrink:0;background:#f1f3f4" alt="">
+    html += `<div onclick="lanzAbrirFicha('${l.id}')" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;overflow:hidden;margin-bottom:12px;display:flex;cursor:pointer">
+      <img src="" data-catalogo-img="${l.imagen_path}" style="width:100px;height:100px;object-fit:contain;flex-shrink:0;background:#f8f9fa" alt="">
       <div style="padding:10px 12px;min-width:0;flex:1">
         <div style="font-size:9.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.4px">${l.rubro||''}</div>
         <div style="font-size:13.5px;font-weight:700;color:#202124;margin:2px 0">${l.producto||''}</div>
-        <div style="font-size:11px;color:#5f6368;line-height:1.35;margin-bottom:4px">${l.descripcion||''}</div>
-        <div style="font-size:10px;color:#9aa0a6">SKU ${l.sku||''} · UMV ${l.umv||''} · x${l.cantidad_x_bulto!=null?l.cantidad_x_bulto:'—'}${l.sin_tacc==='Si' ? ' · <span style="color:#188038;font-weight:700">SIN TACC</span>' : ''}</div>
+        <div style="font-size:10px;color:#9aa0a6">SKU ${l.sku||''} · ${UMV_NOMBRES[l.umv]||l.umv||''} · x${l.cantidad_x_bulto!=null?l.cantidad_x_bulto:'—'}${l.sin_tacc==='Si' ? ' · <span style="color:#188038;font-weight:700">SIN TACC</span>' : ''}</div>
+        <div style="font-size:10px;color:#1a73e8;font-weight:700;margin-top:4px">Ver ficha completa ›</div>
       </div>
     </div>`;
   });
@@ -1426,6 +1454,39 @@ async function catalogoCargarThumb(path){
   }catch(err){
     console.error('[catalogoCargarThumb]', err);
   }
+}
+
+function lanzAbrirFicha(id){
+  const l = catalogoCache.find(x=>x.id===id);
+  if(!l) return;
+
+  document.getElementById('lanz-ficha-nombre').textContent = l.producto || '';
+  document.getElementById('lanz-ficha-rubro').textContent = l.rubro || '';
+  document.getElementById('lanz-ficha-desc').textContent = l.descripcion || '';
+  document.getElementById('lanz-ficha-desc').style.display = l.descripcion ? '' : 'none';
+  document.getElementById('lanz-ficha-sku').textContent = l.sku || '—';
+  document.getElementById('lanz-ficha-umv').textContent = (UMV_NOMBRES[l.umv]||l.umv||'—');
+  document.getElementById('lanz-ficha-bulto').textContent = 'x'+(l.cantidad_x_bulto!=null ? l.cantidad_x_bulto : '—');
+  document.getElementById('lanz-ficha-precio').textContent = '$'+(l.precio_sin_iva!=null ? Number(l.precio_sin_iva).toFixed(2) : '—')+' s/IVA';
+  document.getElementById('lanz-ficha-fecha').textContent = fmtFechaCorta(l.fecha_ingreso);
+  document.getElementById('lanz-ficha-cant-ingresada').textContent = l.cantidad_ingresada!=null ? l.cantidad_ingresada : '—';
+  document.getElementById('lanz-ficha-reemplaza').textContent = l.reemplaza_codigo ? l.reemplaza_codigo : 'No';
+  document.getElementById('lanz-ficha-tacc').textContent = l.sin_tacc==='Si' ? 'Sí' : 'No';
+
+  const img = document.getElementById('lanz-ficha-img');
+  img.src = '';
+  if(l.imagen_path){
+    const { storage, ref, getBytes } = window.fb;
+    getBytes(ref(storage, l.imagen_path)).then(function(bytes){
+      img.src = URL.createObjectURL(new Blob([bytes]));
+    }).catch(function(err){ console.error('[lanzAbrirFicha] imagen', err); });
+  }
+
+  document.getElementById('lanz-ficha').style.display = 'flex';
+}
+
+function lanzCerrarFicha(){
+  document.getElementById('lanz-ficha').style.display = 'none';
 }
 
 // ── VENDEDOR: Popup de aviso de producto nuevo ──
@@ -3488,8 +3549,30 @@ async function adminExportAltaPDF(id){
 // ── ADMIN: Lanzamientos de productos ──
 const RUBROS_LANZAMIENTOS = ['GOLOSINAS','CHOCOLATES','CHOCOLATES ARCOR J.V.','HARINAS','ALIMENTOS','HELADOS',
   'CHOCOLATES BAGLEY JV','HARINAS BAGLEY','CONGELADOS','COMESTIBLES LA CAMPAGNOLA','PANIFICADOS CONGELADOS','NUTRICION'];
+const UMV_NOMBRES = { BU:'BULTO', DI:'DISPLAY', UN:'UNIDAD' };
 var lanzListaCache = [];
 var lanzFormInicializado = false;
+
+// Convierte la fecha de un <input type="date"> ("AAAA-MM-DD") a formato DD/MM/AAAA
+function fmtFechaCorta(str){
+  if(!str) return '—';
+  var partes = str.split('-');
+  if(partes.length!==3) return str;
+  return partes[2]+'/'+partes[1]+'/'+partes[0];
+}
+
+// Línea compacta con todos los datos del lanzamiento, para la lista del admin
+// (en el catálogo del vendedor se muestra una versión más corta, y esta línea
+// completa vive en la "ficha" al tocar el producto).
+function lanzInfoLinea(l){
+  var umvNombre = UMV_NOMBRES[l.umv] || l.umv || '';
+  var precio = l.precio_sin_iva!=null ? Number(l.precio_sin_iva).toFixed(2) : '—';
+  var cantBulto = l.cantidad_x_bulto!=null ? l.cantidad_x_bulto : '—';
+  var cantIngresada = l.cantidad_ingresada!=null ? l.cantidad_ingresada : '—';
+  var reemplaza = l.reemplaza_codigo ? l.reemplaza_codigo : 'No';
+  var sinTacc = l.sin_tacc==='Si' ? 'Sí' : 'No';
+  return 'SKU '+(l.sku||'')+' - '+umvNombre+' - x'+cantBulto+' - '+fmtFechaCorta(l.fecha_ingreso)+' - $'+precio+' s/iva - Primer Ingreso: '+cantIngresada+' '+(l.umv||'')+' - Reemplaza: '+reemplaza+' - Sin TACC: '+sinTacc;
+}
 
 function lanzInitForm(){
   if(lanzFormInicializado) return; // el <select> solo se arma una vez, no hace falta rehacerlo cada vez que se abre la pestaña
@@ -3586,14 +3669,14 @@ async function lanzCargarLista(){
     lanzListaCache.forEach(l=>{
       const activo = l.activo!==false;
       html += `<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:14px 16px;margin-bottom:10px;display:flex;gap:14px;align-items:flex-start${activo?'':';opacity:.55'}">
-        <img src="" data-lanz-img="${l.imagen_path}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:#f1f3f4;flex-shrink:0" alt="">
+        <img src="" data-lanz-img="${l.imagen_path}" style="width:64px;height:64px;object-fit:contain;border-radius:8px;background:#f1f3f4;flex-shrink:0" alt="">
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <div style="font-size:13.5px;font-weight:700;color:#2c3e50">${l.producto||''}</div>
             <span style="font-size:9.5px;font-weight:700;color:#fff;background:${activo?'#188038':'#80868b'};border-radius:10px;padding:2px 8px">${activo?'Activo':'Archivado'}</span>
           </div>
           <div style="font-size:11px;color:#9aa0a6;margin-bottom:4px">SKU ${l.sku||''} · ${l.rubro||''}</div>
-          <div style="font-size:11.5px;color:#5f6368">UMV ${l.umv||''} · x${l.cantidad_x_bulto!=null?l.cantidad_x_bulto:'—'} · $${l.precio_sin_iva!=null?l.precio_sin_iva:'—'} s/IVA · ingreso ${l.fecha_ingreso||''}${l.sin_tacc==='Si' ? ' · <span style="color:#188038;font-weight:700">SIN TACC</span>' : ''}</div>
+          <div style="font-size:11.5px;color:#5f6368">${lanzInfoLinea(l)}</div>
         </div>
         <button onclick="lanzToggleActivo('${l.id}', ${activo})" style="font-size:11px;padding:6px 12px;border:1px solid #dadce0;color:#5f6368;background:#fff;border-radius:6px;cursor:pointer;font-weight:700;white-space:nowrap">${activo?'Archivar':'Reactivar'}</button>
       </div>`;
@@ -5345,9 +5428,9 @@ function supRenderHelados(data){
             <label class="alta-lbl">UMV *</label>
             <select id="lanz-umv" class="alta-input">
               <option value="">Seleccionar...</option>
-              <option value="BU">BU</option>
-              <option value="DI">DI</option>
-              <option value="UN">UN</option>
+              <option value="BU">Bulto (BU)</option>
+              <option value="DI">Display (DI)</option>
+              <option value="UN">Unidad (UN)</option>
             </select>
           </div>
           <div>
