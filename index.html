@@ -700,7 +700,9 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
 <!-- Tarjeta oculta usada solo para generar la imagen prolija que se comparte -->
 <div id="lanz-share-card" style="position:fixed;left:-9999px;top:0;width:380px;background:#fff;font-family:Arial,Helvetica,sans-serif">
   <div style="background:#188038;color:#fff;padding:14px 18px;font-weight:800;font-size:15px">LADIAR · Nuevo Lanzamiento</div>
-  <img id="lanz-share-img" src="" style="width:100%;height:200px;object-fit:contain;background:#f8f9fa;display:block">
+  <div style="width:100%;height:200px;background:#f8f9fa;display:flex;align-items:center;justify-content:center;overflow:hidden">
+    <img id="lanz-share-img" src="" style="max-width:100%;max-height:100%;display:block">
+  </div>
   <div style="padding:18px">
     <div id="lanz-share-rubro" style="font-size:11px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.4px"></div>
     <div id="lanz-share-nombre" style="font-size:18px;font-weight:800;color:#202124;margin:4px 0 8px"></div>
