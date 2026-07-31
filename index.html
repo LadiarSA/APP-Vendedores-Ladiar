@@ -125,7 +125,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
 <!-- Firebase SDK (modular). Expone window.fb con lo que necesita el resto de la app. -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getAuth, signInWithEmailAndPassword, signOut, getIdTokenResult }
+  import { getAuth, signInWithEmailAndPassword, signOut, getIdTokenResult, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc, writeBatch, getDoc, addDoc, serverTimestamp, query, where, orderBy }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -148,6 +148,14 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
 
   window.fb = { auth, db, storage, signInWithEmailAndPassword, signOut, getIdTokenResult, collection, getDocs, ref, getBytes, doc, setDoc, deleteDoc, writeBatch, getDoc, addDoc, serverTimestamp, query, where, orderBy, uploadBytes };
   window.fbReady = true;
+
+  // Cada vez que Firebase termina de chequear si hay una sesión guardada (al cargar
+  // la página, o al refrescar), avisa acá. Si hay un usuario, intentamos restaurar
+  // la sesión sin pedir usuario/clave de nuevo. La función vive en el script
+  // principal (no-module), por eso se llama a través de window.
+  onAuthStateChanged(auth, function(user){
+    if(window.restaurarSesionSiHayUsuario) window.restaurarSesionSiHayUsuario(user);
+  });
 </script>
 
 <div id="data-loading-overlay" style="display:none;position:fixed;inset:0;background:#fff;z-index:10000;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-family:inherit">
@@ -157,6 +165,11 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
 </div>
 
 <!-- ── LOGIN ── -->
+<div id="session-check-overlay" style="position:fixed;inset:0;z-index:10001;background:linear-gradient(160deg,#1a73e8 0%,#0d47a1 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px">
+  <div class="spinner" style="border-color:#ffffff55;border-top-color:#fff"></div>
+  <div style="color:#fff;font-size:12.5px;font-weight:700">Verificando sesión...</div>
+</div>
+
 <div id="login-screen">
   <div id="login-box">
     <h2 id="login-title">MiHUB</h2>
@@ -237,6 +250,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
       </div>
       <input type="date" id="hdr-cal" style="display:none" onchange="updateHdrCal(this.value)">
     </div>
+    <button onclick="location.reload()" title="Actualizar" style="background:#fff2;border:1px solid #fff4;border-radius:8px;padding:4px 9px;color:#fff;font-size:14px;cursor:pointer;line-height:1">🔄</button>
     <button id="btn-logout" onclick="doLogout()">Salir</button>
   </div>
 </div>
@@ -771,6 +785,33 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
   </div>
 </div>
 
+<!-- Popup de aviso: una modificación de cliente que cargó el vendedor fue resuelta -->
+<div id="modcli-popup" style="display:none;position:fixed;inset:0;background:#0007;z-index:4200;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:14px;overflow:hidden;max-width:380px;width:100%">
+    <div id="modcli-popup-header" style="padding:16px;color:#fff">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;opacity:.85" id="modcli-popup-estado-txt"></div>
+      <div style="font-size:15px;font-weight:800;margin-top:2px">Modificación de cliente</div>
+    </div>
+    <div style="padding:16px">
+      <div style="font-size:13px;font-weight:700;color:#202124;margin-bottom:2px" id="modcli-popup-cliente"></div>
+      <div style="font-size:11px;color:#9aa0a6;margin-bottom:10px" id="modcli-popup-categoria"></div>
+      <div style="font-size:12px;color:#5f6368" id="modcli-popup-resuelto-por"></div>
+    </div>
+    <button onclick="modcliPopupCerrar()" style="width:100%;padding:13px;border:none;border-top:1px solid #f1f3f4;background:#fff;color:#5f6368;font-weight:700;font-size:12.5px;cursor:pointer">Entendido</button>
+  </div>
+</div>
+
+<!-- Ficha de Cliente (buscador en Mi Oficina > Clientes) -->
+<div id="clientficha-modal" style="display:none;position:fixed;inset:0;background:#0007;z-index:4300;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:14px;overflow:hidden;max-width:420px;width:100%;max-height:88vh;display:flex;flex-direction:column">
+    <div style="background:#1a73e8;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+      <div style="flex:1;color:#fff;font-weight:800;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="clientficha-nombre"></div>
+      <span onclick="clientFichaCerrar()" style="color:#fff;font-size:20px;cursor:pointer;flex-shrink:0">✕</span>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:16px" id="clientficha-content"></div>
+  </div>
+</div>
+
 
 <script>
 let RAW_DATA = [];
@@ -997,6 +1038,59 @@ async function doLogin(){
   }
 }
 
+// Se llama sola al cargar la página (o al refrescar), apenas Firebase termina de
+// chequear si había una sesión guardada. Si la hay, entra directo a la app sin
+// pedir usuario/clave de nuevo — evita el problema de "cada refresh te desloguea".
+var yaChequeoSesionInicial = false; // evita que se dispare de nuevo con cada login/logout manual
+
+async function restaurarSesionSiHayUsuario(user){
+  if(yaChequeoSesionInicial){ return; } // esto solo corre UNA vez, al cargar la página
+  yaChequeoSesionInicial = true;
+
+  const overlay = document.getElementById('session-check-overlay');
+  if(!user){
+    if(overlay) overlay.style.display = 'none';
+    return; // no había sesión: se queda mostrando la pantalla de login normal
+  }
+  try{
+    const { getIdTokenResult, signOut, auth } = window.fb;
+    const tokenResult = await getIdTokenResult(user, false);
+    const claims = tokenResult.claims;
+
+    if(claims.role==='admin'){
+      currentAdmin = claims.name || 'admin';
+      const okData = await loadFirebaseData();
+      if(!okData){ await signOut(auth); if(overlay) overlay.style.display='none'; return; }
+      document.getElementById('login-screen').style.display='none';
+      if(overlay) overlay.style.display='none';
+      initAdminApp();
+    } else if(claims.role==='supervisor'){
+      currentSupervisor = claims.name;
+      const okData = await loadFirebaseData();
+      if(!okData){ await signOut(auth); if(overlay) overlay.style.display='none'; return; }
+      document.getElementById('login-screen').style.display='none';
+      if(overlay) overlay.style.display='none';
+      initSupervisorApp();
+    } else if(claims.role==='vendedor'){
+      currentVendor = claims.name;
+      const okData = await loadFirebaseData();
+      if(!okData){ await signOut(auth); if(overlay) overlay.style.display='none'; return; }
+      document.getElementById('login-screen').style.display='none';
+      if(overlay) overlay.style.display='none';
+      initAppForVendor();
+    } else {
+      // Token sin un rol reconocido (no debería pasar en uso normal) — por las dudas
+      // cerramos esa sesión rara y mostramos el login, en vez de dejar la app en un
+      // estado intermedio raro.
+      await signOut(auth);
+      if(overlay) overlay.style.display='none';
+    }
+  }catch(err){
+    console.error('[restaurarSesionSiHayUsuario]', err);
+    if(overlay) overlay.style.display='none';
+  }
+}
+
 function doLogout(){
   if(window.fbReady && window.fb.auth.currentUser){ window.fb.signOut(window.fb.auth).catch(function(){}); }
   if(currentAdmin){
@@ -1053,6 +1147,7 @@ function initAppForVendor(){
   renderVendorObjetivos();
   initHdrCal();
   lanzChequearPopup();
+  modcliChequearPopup();
 }
 
 // ── UTILS ──
@@ -2101,6 +2196,175 @@ async function modcliEnviar(){
   }
 }
 
+// ── VENDEDOR: Popup de aviso cuando una modificación propia fue resuelta ──
+var modcliPopupActualId = null;
+
+async function modcliChequearPopup(){
+  try{
+    const { db, collection, getDocs, query, where, doc, getDoc } = window.fb;
+    const code = getVendorCode();
+    const q = query(collection(db,'modificaciones_pendientes'), where('vendedor_code','==',code));
+    const snap = await getDocs(q);
+
+    const resueltas = [];
+    snap.forEach(function(d){
+      const data = d.data();
+      if(data.estado==='aprobado' || data.estado==='rechazado') resueltas.push(Object.assign({id:d.id}, data));
+    });
+    if(!resueltas.length) return;
+
+    // Ordenamos por fecha de resolución (más reciente primero) y mostramos la
+    // primera que el vendedor todavía no vio — de a una por vez, para no
+    // bombardear con varios popups apenas entra.
+    resueltas.sort(function(a,b){
+      const ta = a.fecha_resolucion && a.fecha_resolucion.toMillis ? a.fecha_resolucion.toMillis() : 0;
+      const tb = b.fecha_resolucion && b.fecha_resolucion.toMillis ? b.fecha_resolucion.toMillis() : 0;
+      return tb-ta;
+    });
+
+    for(const r of resueltas){
+      const vistaSnap = await getDoc(doc(db,'modificaciones_vistas',r.id));
+      if(!vistaSnap.exists()){
+        modcliMostrarPopupResuelta(r);
+        return; // una sola por vez
+      }
+    }
+  }catch(err){
+    console.error('[modcliChequearPopup]', err);
+  }
+}
+
+function modcliMostrarPopupResuelta(r){
+  modcliPopupActualId = r.id;
+  const aprobado = r.estado==='aprobado';
+  document.getElementById('modcli-popup-header').style.background = aprobado ? '#188038' : '#ea4335';
+  document.getElementById('modcli-popup-estado-txt').textContent = aprobado ? '✅ Aprobada / cargada en el ERP' : '❌ Rechazada';
+  document.getElementById('modcli-popup-cliente').textContent = r.cliente_nombre || '';
+  document.getElementById('modcli-popup-categoria').textContent = 'ID '+(r.cliente_id||'')+' · '+(MODCLI_CATEGORIA_LABELS[r.categoria]||r.categoria||'');
+  document.getElementById('modcli-popup-resuelto-por').textContent = 'Revisado por '+(r.resuelto_por||'administración')+'.';
+  document.getElementById('modcli-popup').style.display = 'flex';
+}
+
+async function modcliPopupCerrar(){
+  document.getElementById('modcli-popup').style.display = 'none';
+  const id = modcliPopupActualId;
+  modcliPopupActualId = null;
+  if(!id) return;
+  try{
+    const { db, doc, setDoc } = window.fb;
+    await setDoc(doc(db,'modificaciones_vistas',id), { vista_en: new Date().toISOString() });
+  }catch(err){
+    console.error('[modcliPopupCerrar]', err);
+  }
+  // Chequeamos de nuevo por si había más de una modificación resuelta sin ver
+  modcliChequearPopup();
+}
+
+// ── VENDEDOR: Buscador y Ficha de Cliente (pestaña Clientes) ──
+function clientFichaBuscar(){
+  const q = (document.getElementById('clientficha-buscar').value||'').trim().toLowerCase();
+  const el = document.getElementById('clientficha-resultados');
+  if(!q){ el.innerHTML=''; return; }
+
+  const vistos = new Set();
+  const resultados = [];
+  RAW_DATA.forEach(function(r){
+    if(r.vend!==currentVendor) return;
+    if(vistos.has(r.id)) return;
+    const enId = String(r.id).toLowerCase().indexOf(q)!==-1;
+    const enNombre = (r.n||'').toLowerCase().indexOf(q)!==-1;
+    if(enId || enNombre){ vistos.add(r.id); resultados.push(r); }
+  });
+
+  if(!resultados.length){ el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12px;padding:10px">Sin resultados.</div>'; return; }
+  el.innerHTML = resultados.slice(0,20).map(function(r){
+    return '<div onclick="clientFichaAbrir(\''+String(r.id).replace(/'/g,"\\'")+'\')" style="background:#fff;border:1px solid #e8eaed;border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer">'
+      +'<div style="font-size:13px;font-weight:700;color:#202124">'+(r.n||'')+'</div>'
+      +'<div style="font-size:11px;color:#80868b">ID '+r.id+' · '+(r.canal||'')+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+async function clientFichaAbrir(id){
+  const r = RAW_DATA.find(function(x){ return x.vend===currentVendor && String(x.id)===String(id); });
+  if(!r) return;
+
+  document.getElementById('clientficha-nombre').textContent = r.n || '';
+  const cont = document.getElementById('clientficha-content');
+  cont.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12px;padding:16px">Cargando ficha...</div>';
+  document.getElementById('clientficha-modal').style.display = 'flex';
+
+  let f = {};
+  try{
+    const { db, doc, getDoc } = window.fb;
+    const snap = await getDoc(doc(db,'clientes_ficha',String(id)));
+    if(snap.exists()) f = snap.data();
+  }catch(err){
+    console.error('[clientFichaAbrir]', err);
+  }
+
+  function fila(label, valor){
+    if(valor==null || valor==='') return '';
+    return '<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:12px;border-bottom:1px solid #f1f3f4"><span style="color:#9aa0a6">'+label+'</span><span style="color:#202124;font-weight:600;text-align:right">'+valor+'</span></div>';
+  }
+  function seccion(titulo, filasHtml){
+    if(!filasHtml.replace(/\s/g,'')) return '';
+    return '<div style="margin-bottom:14px"><div style="font-size:9.5px;font-weight:800;color:#1a73e8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">'+titulo+'</div>'+filasHtml+'</div>';
+  }
+
+  const direccionCompleta = [f.calle, f.altura].filter(Boolean).join(' ');
+  const coords = (r.la!=null && r.lo!=null) ? r.la.toFixed(5)+', '+r.lo.toFixed(5) : '—';
+
+  let html = '';
+  html += seccion('Identificación',
+    fila('Código', r.id) + fila('Razón Social', f.razon_social) + fila('CUIT', f.cuit) +
+    fila('Categoría de IVA', f.categoria_iva) + fila('Condición de Venta', f.condicion_venta)
+  );
+  html += seccion('Comercial',
+    fila('Canal', r.canal) + fila('Subcanales', f.subcanales) + fila('Categoría', r.tier) +
+    fila('Lista de precios', f.lista_precios) + fila('Zona de Ventas', zonaSinCodigo(r.zona)) +
+    fila('Zona de Reparto', f.zona_reparto) + fila('Vendedores', (f.vendedores||[]).join(', ')) +
+    fila('Esquema Comercial', f.esquema_comercial) + fila('Tipo de Cliente', f.tipo_cliente) +
+    fila('Plan de Fidelización', f.plan_fidelizacion) + fila('Plan', f.plan)
+  );
+  html += seccion('Dirección',
+    fila('Calle', direccionCompleta) + fila('Localidad', f.localidad) + fila('Provincia', f.provincia) +
+    fila('Barrio', f.barrio) + fila('Cód. Postal', f.cod_postal) + fila('Coordenadas', coords)
+  );
+  html += seccion('Contacto',
+    fila('Teléfono', f.telefono) + fila('Mail', f.mail) + fila('Nombre de contacto', f.nombre_contacto) + fila('Cargo', f.cargo_contacto)
+  );
+  html += seccion('Logística',
+    fila('Transportista', f.transportista) + fila('Plazo de entrega', f.plazo_entrega) +
+    fila('Horario', (r.hd&&r.hh) ? (r.hd+' a '+r.hh) : '')
+  );
+  html += seccion('Estado',
+    fila('Estado', f.estado) + fila('Motivo', f.motivo) + fila('Fecha de alta', f.fecha_alta)
+  );
+  if(f.observaciones){
+    html += seccion('Observaciones', '<div style="font-size:12px;color:#5f6368;padding:4px 0">'+f.observaciones+'</div>');
+  }
+  if(f.personas && f.personas.length){
+    const personasHtml = f.personas.map(function(p){
+      return '<div style="background:#f8f9fa;border-radius:8px;padding:8px 10px;margin-bottom:6px">'
+        + '<div style="font-size:12px;font-weight:700;color:#202124">'+(p.nombre||p.titular||'(sin nombre)')+'</div>'
+        + '<div style="font-size:11px;color:#80868b">'+[p.cargo, p.telefono, p.email].filter(Boolean).join(' · ')+'</div>'
+        + '</div>';
+    }).join('');
+    html += seccion('Personas asociadas', personasHtml);
+  }
+
+  if(!html){
+    html = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px">Todavía no hay datos de ficha cargados para este cliente (esperá al próximo import del Maestro de clientes).</div>';
+  }
+
+  cont.innerHTML = html;
+}
+
+function clientFichaCerrar(){
+  document.getElementById('clientficha-modal').style.display = 'none';
+}
+
 function switchTab(tab){
   activeTab = tab;
   document.querySelectorAll('.tab-btn').forEach((t,i)=>{
@@ -2167,6 +2431,12 @@ function buildResumenPanel(){
   myRows.forEach(r=>{ if(byFreq[r.freq]!==undefined) byFreq[r.freq]++; });
 
   let html = `
+    <div class="section-card">
+      <h3>🔍 Buscar cliente</h3>
+      <input type="text" id="clientficha-buscar" class="alta-input" oninput="clientFichaBuscar()" placeholder="Código o nombre del cliente...">
+      <div id="clientficha-resultados" style="margin-top:8px"></div>
+    </div>
+
     <div class="stat-cards">
       <div class="stat-card">
         <div class="label">Clientes totales</div>
@@ -3791,8 +4061,9 @@ function adminClearAllMoves(){
 }
 
 // ── ADMIN: Altas de Cliente (Fase 3 — aprobar/rechazar + exportar) ──
-var adminAltasCache = [];   // último snapshot traído de Firestore, con {id,...datos}
+var adminAltasCache = [];   // altas + modificaciones combinadas, cada item con _tipo:'alta'|'modificacion'
 var adminAltasFiltro = 'pendiente'; // 'pendiente' | 'aprobado' | 'rechazado' | 'todas'
+var adminAbmTipoFiltro = 'todos'; // 'todos' | 'alta' | 'modificacion'
 var jsPDFLoadedAdmin = false;
 
 function adminFmtFechaAlta(ts){
@@ -3810,32 +4081,65 @@ function adminFmtFechaAlta(ts){
 async function adminCargarAltas(){
   const el = document.getElementById('admin-altas-content');
   if(!el) return;
-  el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px 10px">Cargando altas...</div>';
+  el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px 10px">Cargando...</div>';
 
   try{
-    // Ya no filtramos por estado en la consulta: traemos todas (ordenadas por fecha)
-    // y el filtro pendiente/aprobada/rechazada/todas se aplica en el cliente. Esto
-    // también evita depender de un índice compuesto en Firestore.
+    // Traemos las dos colecciones (Altas y Modificaciones) y las unificamos en una
+    // sola lista para poder filtrarlas juntas por Tipo y por Estado.
     const { db, collection, getDocs, query, orderBy } = window.fb;
-    const q = query(collection(db,'altas_pendientes'), orderBy('fecha_creacion','desc'));
-    const snap = await getDocs(q);
+    const [snapAltas, snapMods] = await Promise.all([
+      getDocs(query(collection(db,'altas_pendientes'), orderBy('fecha_creacion','desc'))),
+      getDocs(query(collection(db,'modificaciones_pendientes'), orderBy('fecha_creacion','desc')))
+    ]);
 
     adminAltasCache = [];
-    snap.forEach(docSnap=>{ adminAltasCache.push(Object.assign({id:docSnap.id}, docSnap.data())); });
+    snapAltas.forEach(docSnap=>{ adminAltasCache.push(Object.assign({id:docSnap.id, _tipo:'alta'}, docSnap.data())); });
+    snapMods.forEach(docSnap=>{ adminAltasCache.push(Object.assign({id:docSnap.id, _tipo:'modificacion'}, docSnap.data())); });
 
+    adminAltasCache.sort(function(a,b){
+      const ta = a.fecha_creacion && a.fecha_creacion.toMillis ? a.fecha_creacion.toMillis() : 0;
+      const tb = b.fecha_creacion && b.fecha_creacion.toMillis ? b.fecha_creacion.toMillis() : 0;
+      return tb-ta;
+    });
+
+    adminRenderAbmTipoFiltros();
     adminRenderAltasFiltros();
     adminRenderAltasList();
   }catch(err){
     console.error('[adminCargarAltas]', err);
-    el.innerHTML = '<div style="text-align:center;color:#ea4335;font-size:12.5px;padding:16px 10px">Error al cargar las altas: '+(err.message||err)+'</div>';
+    el.innerHTML = '<div style="text-align:center;color:#ea4335;font-size:12.5px;padding:16px 10px">Error al cargar: '+(err.message||err)+'</div>';
   }
+}
+
+function adminRenderAbmTipoFiltros(){
+  const el = document.getElementById('admin-abm-tipo-filtros');
+  if(!el) return;
+  const counts = {alta:0, modificacion:0};
+  adminAltasCache.forEach(a=>{ if(counts[a._tipo]!==undefined) counts[a._tipo]++; });
+  const opciones = [
+    {key:'todos', label:'Todos', count:adminAltasCache.length},
+    {key:'alta', label:'Altas', count:counts.alta},
+    {key:'modificacion', label:'Modificaciones', count:counts.modificacion}
+  ];
+  el.innerHTML = opciones.map(function(o){
+    const activo = adminAbmTipoFiltro===o.key;
+    return '<button onclick="adminSetAbmTipoFiltro(\''+o.key+'\')" style="font-size:11.5px;padding:6px 14px;border:1.5px solid #2c3e50;color:'+(activo?'#fff':'#2c3e50')+';background:'+(activo?'#2c3e50':'#fff')+';border-radius:6px;cursor:pointer;font-weight:800">'+o.label+' ('+o.count+')</button>';
+  }).join('');
+}
+
+function adminSetAbmTipoFiltro(t){
+  adminAbmTipoFiltro = t;
+  adminRenderAbmTipoFiltros();
+  adminRenderAltasFiltros();
+  adminRenderAltasList();
 }
 
 function adminRenderAltasFiltros(){
   const el = document.getElementById('admin-altas-filtros');
   if(!el) return;
+  const base = adminAbmTipoFiltro==='todos' ? adminAltasCache : adminAltasCache.filter(a=>a._tipo===adminAbmTipoFiltro);
   const counts = {pendiente:0, aprobado:0, rechazado:0};
-  adminAltasCache.forEach(a=>{
+  base.forEach(a=>{
     const e = a.estado || 'pendiente';
     if(counts[e]===undefined) counts[e]=0;
     counts[e]++;
@@ -3844,7 +4148,7 @@ function adminRenderAltasFiltros(){
     {key:'pendiente', label:'Pendientes', count:counts.pendiente, color:'#f9ab00'},
     {key:'aprobado',  label:'Aprobadas',  count:counts.aprobado,  color:'#188038'},
     {key:'rechazado', label:'Rechazadas', count:counts.rechazado, color:'#ea4335'},
-    {key:'todas',     label:'Todas',      count:adminAltasCache.length, color:'#2c3e50'}
+    {key:'todas',     label:'Todas',      count:base.length, color:'#2c3e50'}
   ];
   el.innerHTML = opciones.map(function(o){
     const activo = adminAltasFiltro===o.key;
@@ -3862,12 +4166,11 @@ function adminRenderAltasList(){
   const el = document.getElementById('admin-altas-content');
   if(!el) return;
 
-  const lista = adminAltasFiltro==='todas'
-    ? adminAltasCache
-    : adminAltasCache.filter(a=>(a.estado||'pendiente')===adminAltasFiltro);
+  let lista = adminAbmTipoFiltro==='todos' ? adminAltasCache : adminAltasCache.filter(a=>a._tipo===adminAbmTipoFiltro);
+  lista = adminAltasFiltro==='todas' ? lista : lista.filter(a=>(a.estado||'pendiente')===adminAltasFiltro);
 
   if(!lista.length){
-    el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px 10px">No hay altas en esta categoría.</div>';
+    el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px 10px">No hay elementos en esta categoría.</div>';
     return;
   }
 
@@ -3876,11 +4179,18 @@ function adminRenderAltasList(){
 
   let html = '';
   lista.forEach(a=>{
-    const estado = a.estado || 'pendiente';
-    html += `<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:14px 16px;margin-bottom:12px">
+    html += a._tipo==='alta' ? adminRenderTarjetaAlta(a, badgeColor, badgeLabel) : adminRenderTarjetaModificacion(a, badgeColor, badgeLabel);
+  });
+  el.innerHTML = html;
+}
+
+function adminRenderTarjetaAlta(a, badgeColor, badgeLabel){
+  const estado = a.estado || 'pendiente';
+  return `<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:14px 16px;margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
         <div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:9px;font-weight:800;color:#fff;background:#1a73e8;border-radius:4px;padding:2px 6px">ALTA</span>
             <div style="font-size:14px;font-weight:700;color:#2c3e50">${a.nombre_negocio||a.razon_social||'(sin nombre)'}</div>
             <span style="font-size:9.5px;font-weight:700;color:#fff;background:${badgeColor[estado]};border-radius:10px;padding:2px 8px">${badgeLabel[estado]}</span>
           </div>
@@ -3913,24 +4223,60 @@ function adminRenderAltasList(){
       ${estado!=='pendiente' ? `<div style="font-size:10px;color:#9aa0a6;margin-bottom:10px">Resuelta por ${a.resuelto_por||'—'} el ${adminFmtFechaAlta(a.fecha_resolucion)}</div>` : ''}
       <div style="display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid #f1f3f4;padding-top:10px">
         ${estado==='pendiente' ? `
-          <button onclick="adminResolverAlta('${a.id}','aprobado')" style="font-size:11px;padding:6px 12px;border:1.5px solid #188038;color:#fff;background:#188038;border-radius:6px;cursor:pointer;font-weight:700">✅ Aprobar</button>
-          <button onclick="adminResolverAlta('${a.id}','rechazado')" style="font-size:11px;padding:6px 12px;border:1.5px solid #ea4335;color:#fff;background:#ea4335;border-radius:6px;cursor:pointer;font-weight:700">❌ Rechazar</button>
+          <button onclick="adminResolverItem('alta','${a.id}','aprobado')" style="font-size:11px;padding:6px 12px;border:1.5px solid #188038;color:#fff;background:#188038;border-radius:6px;cursor:pointer;font-weight:700">✅ Aprobar</button>
+          <button onclick="adminResolverItem('alta','${a.id}','rechazado')" style="font-size:11px;padding:6px 12px;border:1.5px solid #ea4335;color:#fff;background:#ea4335;border-radius:6px;cursor:pointer;font-weight:700">❌ Rechazar</button>
         ` : `
-          <button onclick="adminResolverAlta('${a.id}','pendiente')" style="font-size:11px;padding:6px 12px;border:1px solid #dadce0;color:#5f6368;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">↺ Volver a pendiente</button>
+          <button onclick="adminResolverItem('alta','${a.id}','pendiente')" style="font-size:11px;padding:6px 12px;border:1px solid #dadce0;color:#5f6368;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">↺ Volver a pendiente</button>
         `}
         <button onclick="adminExportAltaPDF('${a.id}')" style="font-size:11px;padding:6px 12px;border:1.5px solid #2c3e50;color:#2c3e50;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">📄 PDF</button>
         ${a.documentacion_path ? `<button onclick="adminVerAdjunto('${a.documentacion_path}')" style="font-size:11px;padding:6px 12px;border:1.5px solid #5f6368;color:#5f6368;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">📎 Ver adjunto</button>` : ''}
+        ${estado==='rechazado' ? `<button onclick="adminEliminarItem('alta','${a.id}')" style="font-size:11px;padding:6px 12px;border:1.5px solid #ea4335;color:#ea4335;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">🗑 Eliminar</button>` : ''}
       </div>
     </div>`;
-  });
-  el.innerHTML = html;
 }
 
-async function adminResolverAlta(id, nuevoEstado){
+function adminRenderTarjetaModificacion(a, badgeColor, badgeLabel){
+  const estado = a.estado || 'pendiente';
+  const campos = a.campos || {};
+  const filasCampos = Object.entries(campos).filter(e=>e[1]!=null && e[1]!=='')
+    .map(e=>`<div><b>${MODCLI_CAMPO_LABELS[e[0]]||e[0]}:</b> ${e[1]}</div>`).join('');
+  return `<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:14px 16px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:9px;font-weight:800;color:#fff;background:#8e44ad;border-radius:4px;padding:2px 6px">MODIFICACIÓN</span>
+            <div style="font-size:14px;font-weight:700;color:#2c3e50">${a.cliente_nombre||'(sin nombre)'}</div>
+            <span style="font-size:9.5px;font-weight:700;color:#fff;background:${badgeColor[estado]};border-radius:10px;padding:2px 8px">${badgeLabel[estado]}</span>
+          </div>
+          <div style="font-size:11px;color:#9aa0a6">ID ${a.cliente_id||''} · ${MODCLI_CATEGORIA_LABELS[a.categoria]||a.categoria||''}</div>
+        </div>
+        <div style="font-size:10px;color:#9aa0a6;text-align:right;white-space:nowrap">${adminFmtFechaAlta(a.fecha_creacion)}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:11.5px;color:#5f6368;margin-bottom:8px">
+        <div><b>Vendedor:</b> ${a.vendedor_nombre||''} (${a.vendedor_code||''})</div>
+        <div><b>Zona:</b> ${a.zona||'—'}</div>
+        ${filasCampos}
+      </div>
+      ${estado!=='pendiente' ? `<div style="font-size:10px;color:#9aa0a6;margin-bottom:10px">Resuelta por ${a.resuelto_por||'—'} el ${adminFmtFechaAlta(a.fecha_resolucion)}</div>` : ''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid #f1f3f4;padding-top:10px">
+        ${estado==='pendiente' ? `
+          <button onclick="adminResolverItem('modificacion','${a.id}','aprobado')" style="font-size:11px;padding:6px 12px;border:1.5px solid #188038;color:#fff;background:#188038;border-radius:6px;cursor:pointer;font-weight:700">✅ Aprobar</button>
+          <button onclick="adminResolverItem('modificacion','${a.id}','rechazado')" style="font-size:11px;padding:6px 12px;border:1.5px solid #ea4335;color:#fff;background:#ea4335;border-radius:6px;cursor:pointer;font-weight:700">❌ Rechazar</button>
+        ` : `
+          <button onclick="adminResolverItem('modificacion','${a.id}','pendiente')" style="font-size:11px;padding:6px 12px;border:1px solid #dadce0;color:#5f6368;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">↺ Volver a pendiente</button>
+        `}
+        ${estado==='rechazado' ? `<button onclick="adminEliminarItem('modificacion','${a.id}')" style="font-size:11px;padding:6px 12px;border:1.5px solid #ea4335;color:#ea4335;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">🗑 Eliminar</button>` : ''}
+      </div>
+    </div>`;
+}
+
+async function adminResolverItem(tipo, id, nuevoEstado){
   const labels = {aprobado:'aprobar', rechazado:'rechazar', pendiente:'devolver a pendiente'};
-  if(!confirm('¿Confirmás '+labels[nuevoEstado]+' esta alta?')) return;
+  const desc = tipo==='alta' ? 'esta alta' : 'esta modificación';
+  if(!confirm('¿Confirmás '+labels[nuevoEstado]+' '+desc+'?')) return;
   try{
     const { db, doc, setDoc, serverTimestamp } = window.fb;
+    const coleccion = tipo==='alta' ? 'altas_pendientes' : 'modificaciones_pendientes';
     const data = { estado: nuevoEstado };
     if(nuevoEstado==='pendiente'){
       data.resuelto_por = null;
@@ -3939,45 +4285,77 @@ async function adminResolverAlta(id, nuevoEstado){
       data.resuelto_por = currentAdmin || '';
       data.fecha_resolucion = serverTimestamp();
     }
-    await setDoc(doc(db,'altas_pendientes',id), data, {merge:true});
+    await setDoc(doc(db,coleccion,id), data, {merge:true});
     await adminCargarAltas(); // re-trae todo para tener la fecha_resolucion real del servidor
   }catch(err){
-    console.error('[adminResolverAlta]', err);
+    console.error('[adminResolverItem]', err);
     alert('Error al actualizar el estado: '+(err.message||err));
   }
 }
 
+async function adminEliminarItem(tipo, id){
+  if(!confirm('¿Eliminar definitivamente este registro rechazado? Esta acción no se puede deshacer.')) return;
+  try{
+    const { db, doc, deleteDoc } = window.fb;
+    const coleccion = tipo==='alta' ? 'altas_pendientes' : 'modificaciones_pendientes';
+    await deleteDoc(doc(db,coleccion,id));
+    await adminCargarAltas();
+  }catch(err){
+    console.error('[adminEliminarItem]', err);
+    alert('Error al eliminar: '+(err.message||err));
+  }
+}
+
 async function adminExportAltasExcel(){
-  const lista = adminAltasFiltro==='todas'
-    ? adminAltasCache
-    : adminAltasCache.filter(a=>(a.estado||'pendiente')===adminAltasFiltro);
-  if(!lista.length){ alert('No hay altas para exportar en este filtro.'); return; }
+  let lista = adminAbmTipoFiltro==='todos' ? adminAltasCache : adminAltasCache.filter(a=>a._tipo===adminAbmTipoFiltro);
+  lista = adminAltasFiltro==='todas' ? lista : lista.filter(a=>(a.estado||'pendiente')===adminAltasFiltro);
+  if(!lista.length){ alert('No hay elementos para exportar en este filtro.'); return; }
 
   try{
     await ensureSheetJSVend();
-    const header = ['Estado','Fecha alta','Vendedor','Código vend.','Zona','Razón Social','Nombre Negocio',
+    const header = ['Tipo','Estado','Fecha','Vendedor','Código vend.','Zona','Cliente/Negocio','Razón Social',
       'Dirección','Localidad','CUIT/DNI','Categoría IVA','Canal','Categoría PDV','Lista de precios',
       'Dueño/comprador','Celular','Mail','Latitud','Longitud','Transportista','Horario entrega',
       'Día visita alta','Frecuencia alta','Orden alta','Vendedor compañero','Día visita compañero',
-      'Frecuencia compañero','Orden compañero','Observaciones','Adjunto','Resuelto por','Fecha resolución'];
+      'Frecuencia compañero','Orden compañero','Observaciones','Adjunto',
+      'Categoría modificada','Detalle modificación',
+      'Resuelto por','Fecha resolución'];
     const aoa = [header];
     lista.forEach(a=>{
-      aoa.push([
-        a.estado||'pendiente', adminFmtFechaAlta(a.fecha_creacion), a.vendedor_nombre||'', a.vendedor_code||'',
-        a.zona||'', a.razon_social||'', a.nombre_negocio||'', a.direccion||'', a.localidad||'',
-        a.cuit_dni||'', a.categoria_iva||'', a.canal||'', a.categoria_pdv||'', a.lista_precios||'',
-        a.dueno_nombre||'', a.celular||'', a.mail||'', a.lat!=null?a.lat:'', a.lon!=null?a.lon:'',
-        a.transportista||'', a.horario_entrega||'', a.dia_alta||'', a.frecuencia_alta||'', a.orden_alta!=null?a.orden_alta:'',
-        a.companero_nombre||'', a.dia_companero||'', a.frecuencia_companero||'', a.orden_companero!=null?a.orden_companero:'',
-        a.observaciones||'', a.documentacion_path ? a.documentacion_path.split('/').pop() : '',
-        a.resuelto_por||'', a.fecha_resolucion ? adminFmtFechaAlta(a.fecha_resolucion) : ''
-      ]);
+      if(a._tipo==='alta'){
+        aoa.push([
+          'Alta', a.estado||'pendiente', adminFmtFechaAlta(a.fecha_creacion), a.vendedor_nombre||'', a.vendedor_code||'',
+          a.zona||'', a.nombre_negocio||'', a.razon_social||'', a.direccion||'', a.localidad||'',
+          a.cuit_dni||'', a.categoria_iva||'', a.canal||'', a.categoria_pdv||'', a.lista_precios||'',
+          a.dueno_nombre||'', a.celular||'', a.mail||'', a.lat!=null?a.lat:'', a.lon!=null?a.lon:'',
+          a.transportista||'', a.horario_entrega||'', a.dia_alta||'', a.frecuencia_alta||'', a.orden_alta!=null?a.orden_alta:'',
+          a.companero_nombre||'', a.dia_companero||'', a.frecuencia_companero||'', a.orden_companero!=null?a.orden_companero:'',
+          a.observaciones||'', a.documentacion_path ? a.documentacion_path.split('/').pop() : '',
+          '', '',
+          a.resuelto_por||'', a.fecha_resolucion ? adminFmtFechaAlta(a.fecha_resolucion) : ''
+        ]);
+      } else {
+        const campos = a.campos || {};
+        const detalle = Object.entries(campos).filter(e=>e[1]!=null && e[1]!=='')
+          .map(e=>(MODCLI_CAMPO_LABELS[e[0]]||e[0])+': '+e[1]).join(' | ');
+        aoa.push([
+          'Modificación', a.estado||'pendiente', adminFmtFechaAlta(a.fecha_creacion), a.vendedor_nombre||'', a.vendedor_code||'',
+          a.zona||'', a.cliente_nombre||'', '', '', '',
+          '', '', '', '', '',
+          '', '', '', '', '',
+          '', '', '', '', '',
+          '', '', '', '',
+          '', '',
+          MODCLI_CATEGORIA_LABELS[a.categoria]||a.categoria||'', detalle,
+          a.resuelto_por||'', a.fecha_resolucion ? adminFmtFechaAlta(a.fecha_resolucion) : ''
+        ]);
+      }
     });
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Altas');
+    XLSX.utils.book_append_sheet(wb, ws, 'ABM Clientes');
     const ts = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
-    XLSX.writeFile(wb, `altas_clientes_${adminAltasFiltro}_${ts}.xlsx`);
+    XLSX.writeFile(wb, `abm_clientes_${adminAbmTipoFiltro}_${adminAltasFiltro}_${ts}.xlsx`);
   }catch(err){
     console.error('[adminExportAltasExcel]', err);
     alert('Error al generar el Excel: '+(err.message||err));
@@ -4803,6 +5181,7 @@ function adminSaveClientEdit(){
 
 // ── ADMIN: importar Maestro de clientes + Hoja de reparto ──
 var adminPendingImportRows = null;
+var adminPendingFichaMap = null; // Map código -> {...ficha del cliente, personas:[...]} del último import procesado
 
 function adminOpenImportModal(){
   document.getElementById('admin-import-modal').style.display='flex';
@@ -4835,7 +5214,11 @@ function adminReadFileAsText(file){
 async function adminParseMaestro(file){
   const buf = await adminReadFileAsArrayBuffer(file);
   const wb = XLSX.read(buf, {type:'array'});
-  const ws = wb.Sheets[wb.SheetNames[0]];
+
+  // "Maestro General" por nombre de hoja si existe; si no, la primera hoja
+  // (por compatibilidad con archivos viejos que no tengan ese nombre exacto).
+  const wsName = wb.SheetNames.find(n=>n.trim().toLowerCase()==='maestro general') || wb.SheetNames[0];
+  const ws = wb.Sheets[wsName];
   const aoa = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:null});
 
   const headerRow = aoa[0].map(h=>String(h||'').trim());
@@ -4850,6 +5233,39 @@ async function adminParseMaestro(file){
   const iLon = colIdx('Long.');
   const iEstado = colIdx('Estado');
 
+  // Campos adicionales, solo para la Ficha de Cliente (no afectan el ruteo).
+  const iRazonSocial = colIdx('Razón Social');
+  const iCuit = colIdx('CUIT');
+  const iCategoriaIva = colIdx('Categoría de IVA');
+  const iCondicionVenta = colIdx('Condición de Venta');
+  const iListaPrecios = colIdx('Lista de Precios');
+  const iSubcanales = colIdx('Subcanales');
+  const iZonaReparto = colIdx('Zona de Reparto');
+  const iVend1 = colIdx('Vendedor 1');
+  const iVend2 = colIdx('Vendedor 2');
+  const iVend3 = colIdx('Vendedor 3');
+  const iVend4 = colIdx('Vendedor 4');
+  const iVend5 = colIdx('Vendedor 5');
+  const iEsquemaComercial = colIdx('Esquema Comercial');
+  const iTipoCliente = colIdx('Tipo de Cliente');
+  const iPlanFidelizacion = colIdx('Plan de Fidelización');
+  const iPlan = colIdx('Plan');
+  const iCalle = colIdx('Calle');
+  const iAltura = colIdx('Altura');
+  const iLocalidad = colIdx('Localidad');
+  const iProvincia = colIdx('Provincia');
+  const iCodPostal = colIdx('Cód. Postal');
+  const iBarrio = colIdx('Barrio');
+  const iTelefono = colIdx('Teléfono');
+  const iMail = colIdx('Dirección de Mail');
+  const iNombreContacto = colIdx('Nombre del Contacto');
+  const iCargoContacto = colIdx('Cargo');
+  const iTransportista = colIdx('Transportista Defecto');
+  const iPlazoEntrega = colIdx('Plazo de Entrega');
+  const iMotivo = colIdx('Motivo');
+  const iFechaAlta = colIdx('Fecha de Alta');
+  const iObservaciones = colIdx('Observaciones');
+
   const maestroMap = new Map();
   for(let i=1;i<aoa.length;i++){
     const row = aoa[i];
@@ -4861,14 +5277,62 @@ async function adminParseMaestro(file){
     const zonaCorta = ZONA_MAESTRO_TO_CORTA[zonaRaw] || null;
     const lat = parseFloat(row[iLat]);
     const lon = parseFloat(row[iLon]);
+    const val = (idx)=> idx>=0 && row[idx]!=null ? String(row[idx]).trim() : '';
+
     maestroMap.set(codigo, {
       nombre: String(row[iNombre]||'').trim(),
       tier, canal: String(row[iCanal]||'').trim(),
       zonaCorta,
       lat: isNaN(lat)?null:lat, lon: isNaN(lon)?null:lon,
-      estado: String(row[iEstado]||'').trim()
+      estado: String(row[iEstado]||'').trim(),
+      // ── Ficha de Cliente (no se usan para el ruteo, solo para la búsqueda del vendedor) ──
+      ficha: {
+        razon_social: val(iRazonSocial), cuit: val(iCuit), categoria_iva: val(iCategoriaIva),
+        condicion_venta: val(iCondicionVenta), lista_precios: val(iListaPrecios),
+        subcanales: val(iSubcanales), zona_reparto: val(iZonaReparto),
+        vendedores: [val(iVend1),val(iVend2),val(iVend3),val(iVend4),val(iVend5)].filter(Boolean),
+        esquema_comercial: val(iEsquemaComercial), tipo_cliente: val(iTipoCliente),
+        plan_fidelizacion: val(iPlanFidelizacion), plan: val(iPlan),
+        calle: val(iCalle), altura: val(iAltura), localidad: val(iLocalidad), provincia: val(iProvincia),
+        cod_postal: val(iCodPostal), barrio: val(iBarrio),
+        telefono: val(iTelefono), mail: val(iMail), nombre_contacto: val(iNombreContacto), cargo_contacto: val(iCargoContacto),
+        transportista: val(iTransportista), plazo_entrega: val(iPlazoEntrega),
+        motivo: val(iMotivo), fecha_alta: val(iFechaAlta), observaciones: val(iObservaciones),
+        personas: []
+      }
     });
   }
+
+  // Hoja "Personas": contactos asociados a cada cliente (puede haber varios por cliente)
+  const wsPersonasName = wb.SheetNames.find(n=>n.trim().toLowerCase()==='personas');
+  if(wsPersonasName){
+    const wsP = wb.Sheets[wsPersonasName];
+    const aoaP = XLSX.utils.sheet_to_json(wsP, {header:1, raw:true, defval:null});
+    const headerP = aoaP[0].map(h=>String(h||'').trim());
+    const colIdxP = (name)=> headerP.findIndex(h=>h.toLowerCase()===name.toLowerCase());
+    const pCliente = colIdxP('Cliente');
+    const pTitular = colIdxP('Titular');
+    const pNombre = colIdxP('Nombre');
+    const pCargo = colIdxP('Cargo');
+    const pEmail = colIdxP('Email');
+    const pTelefono = colIdxP('Telefono');
+
+    for(let i=1;i<aoaP.length;i++){
+      const row = aoaP[i];
+      if(!row || row[pCliente]==null || row[pCliente]==='') continue;
+      const codigo = String(parseInt(row[pCliente])).trim();
+      const entry = maestroMap.get(codigo);
+      if(!entry) continue; // persona de un cliente que no está en el Maestro General
+      entry.ficha.personas.push({
+        titular: row[pTitular]!=null ? String(row[pTitular]).trim() : '',
+        nombre: row[pNombre]!=null ? String(row[pNombre]).trim() : '',
+        cargo: row[pCargo]!=null ? String(row[pCargo]).trim() : '',
+        email: row[pEmail]!=null ? String(row[pEmail]).trim() : '',
+        telefono: row[pTelefono]!=null ? String(row[pTelefono]).trim() : ''
+      });
+    }
+  }
+
   return maestroMap;
 }
 
@@ -4920,6 +5384,7 @@ async function adminProcessImport(){
   try{
     await ensureSheetJSVend();
     const maestroMap = await adminParseMaestro(maestroFile);
+    adminPendingFichaMap = maestroMap;
     const repartoRows = await adminParseReparto(repartoFile);
 
     // Índice de filas ya existentes por vendedor+cliente, para preservar patrón de semanas
@@ -5031,6 +5496,7 @@ async function adminConfirmImport(){
   adminShowToast('Datos importados — sincronizando con Firebase...');
 
   await adminSyncAllClientesFirestore();
+  await adminSyncFichaClientesFirestore();
   await adminSaveManualMovesFirestore();
   adminShowToast('Sincronización con Firebase completa');
 }
@@ -5070,6 +5536,44 @@ async function adminSyncAllClientesFirestore(){
   }catch(err){
     console.error('[adminSyncAllClientesFirestore]', err);
     adminShowToast('⚠️ Error sincronizando con Firebase: ' + (err.message||err));
+  }
+}
+
+// Sube la Ficha de Cliente (datos ricos del Maestro General + Personas) a una
+// colección aparte, para que el buscador del vendedor pueda consultarla sin
+// tener que cargar todo RAW_DATA. Se sincroniza cada vez que se confirma un
+// import nuevo del Maestro de clientes.
+async function adminSyncFichaClientesFirestore(){
+  if(!window.fbReady || !adminPendingFichaMap) return;
+  try{
+    const { db, collection, getDocs, writeBatch, doc } = window.fb;
+
+    const idsActuales = new Set(RAW_DATA.map(r=>String(r.id)));
+
+    const snap = await getDocs(collection(db,'clientes_ficha'));
+    const idsEnFirestore = [];
+    snap.forEach(d=>idsEnFirestore.push(d.id));
+    const idsABorrar = idsEnFirestore.filter(id=>!idsActuales.has(id));
+
+    const LOTE = 400;
+    for(let i=0;i<idsABorrar.length;i+=LOTE){
+      const batch = writeBatch(db);
+      idsABorrar.slice(i,i+LOTE).forEach(id=>batch.delete(doc(db,'clientes_ficha',id)));
+      await batch.commit();
+    }
+
+    const entries = [...adminPendingFichaMap.entries()].filter(([codigo])=>idsActuales.has(codigo));
+    for(let i=0;i<entries.length;i+=LOTE){
+      const batch = writeBatch(db);
+      entries.slice(i,i+LOTE).forEach(([codigo, info])=>{
+        batch.set(doc(db,'clientes_ficha',codigo), info.ficha);
+      });
+      await batch.commit();
+    }
+    adminPendingFichaMap = null;
+  }catch(err){
+    console.error('[adminSyncFichaClientesFirestore]', err);
+    adminShowToast('⚠️ Error sincronizando fichas de cliente: ' + (err.message||err));
   }
 }
 
@@ -5866,6 +6370,7 @@ function supRenderHelados(data){
     <div style="display:flex;align-items:center;gap:8px">
       <button onclick="adminOpenImportModal()" style="background:#fff2;color:#fff;border:1.5px solid #fff4;border-radius:8px;padding:5px 14px;font-weight:700;font-size:12px;cursor:pointer">📥 Importar</button>
       <button onclick="adminOpenErpExportModal()" style="background:#fff2;color:#fff;border:1.5px solid #fff4;border-radius:8px;padding:5px 14px;font-weight:700;font-size:12px;cursor:pointer">📋 Exportar ERP</button>
+      <button onclick="location.reload()" title="Actualizar" style="background:#fff2;color:#fff;border:1.5px solid #fff4;border-radius:8px;padding:5px 10px;font-weight:700;font-size:12px;cursor:pointer">🔄</button>
       <button onclick="doLogout()" style="background:#fff2;color:#fff;border:1.5px solid #fff4;border-radius:8px;padding:5px 14px;font-weight:700;font-size:12px;cursor:pointer">Salir</button>
     </div>
   </div>
@@ -5879,7 +6384,7 @@ function supRenderHelados(data){
     <button id="admin-tab-ruta" onclick="adminSetTab('ruta')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid #2c3e50;color:#2c3e50">RUTA</button>
     <button id="admin-tab-comparativa" onclick="adminSetTab('comparativa')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b">COMPARATIVA</button>
     <button id="admin-tab-cambios" onclick="adminSetTab('cambios')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b">CAMBIOS</button>
-    <button id="admin-tab-altas" onclick="adminSetTab('altas')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b;display:none">ALTAS</button>
+    <button id="admin-tab-altas" onclick="adminSetTab('altas')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b;display:none">ABM CLIENTES</button>
     <button id="admin-tab-lanzamientos" onclick="adminSetTab('lanzamientos')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b;display:none">LANZAMIENTOS</button>
   </div>
   <!-- RUTA panel: sidebar + map -->
@@ -5985,7 +6490,10 @@ function supRenderHelados(data){
 
   <!-- ALTAS DE CLIENTES (Fase 3: aprobar/rechazar + exportar) -->
   <div id="admin-panel-altas" style="display:none;flex:1;flex-direction:column;overflow:hidden">
-    <div style="background:#f8f9fa;border-bottom:1px solid #e8eaed;padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;flex-shrink:0">
+    <div style="background:#f8f9fa;border-bottom:1px solid #e8eaed;padding:10px 16px 0;display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">
+      <div id="admin-abm-tipo-filtros" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>
+    </div>
+    <div style="background:#f8f9fa;border-bottom:1px solid #e8eaed;padding:0 16px 10px;display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;flex-shrink:0">
       <div id="admin-altas-filtros" style="display:flex;gap:6px;flex-wrap:wrap"></div>
       <div style="display:flex;gap:8px">
         <button onclick="adminExportAltasExcel()" style="font-size:11px;padding:6px 12px;border:1.5px solid #188038;color:#188038;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">⬇ Exportar Excel</button>
@@ -6189,6 +6697,7 @@ function supRenderHelados(data){
         </div>
         <input type="date" id="sup-cal" style="display:none" onchange="updateSupCal(this.value)">
       </div>
+      <button onclick="location.reload()" title="Actualizar" style="background:#fff2;color:#fff;border:1.5px solid #fff4;border-radius:8px;padding:5px 10px;font-weight:700;font-size:12px;cursor:pointer">🔄</button>
       <button onclick="doLogout()" style="background:#fff2;color:#fff;border:1.5px solid #fff4;border-radius:8px;padding:5px 14px;font-weight:700;font-size:12px;cursor:pointer">Salir</button>
     </div>
   </div>
