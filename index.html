@@ -409,6 +409,14 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
       </div>
     </div>
 
+    <div onclick="modcliAbrir()" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
+      <span style="font-size:22px">✏️</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#202124">Modificación de Cliente</div>
+        <div style="font-size:11px;color:#80868b">Corregir datos de un cliente existente</div>
+      </div>
+    </div>
+
     <div onclick="oficinaProximamente('Alta Reclamo Cliente')" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer;opacity:.6">
       <span style="font-size:22px">⚠️</span>
       <div>
@@ -624,6 +632,49 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
     <div id="alta-error" style="display:none;background:#fce8e6;color:#c5221f;border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:12px;white-space:pre-line"></div>
 
     <button onclick="altaGuardarCliente()" id="alta-btn-guardar" style="width:100%;padding:12px;border:none;background:#188038;color:#fff;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">Guardar Alta</button>
+  </div>
+</div>
+
+<!-- Modificación de Cliente -->
+<div class="panel" id="panel-modificacion-cliente" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
+  <div style="background:#188038;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+    <span onclick="modcliVolver()" style="color:#fff;font-size:20px;cursor:pointer">←</span>
+    <div style="color:#fff;font-weight:800;font-size:14px">✏️ Modificación de Cliente</div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px">
+
+    <!-- Paso 1: buscar cliente -->
+    <div id="modcli-paso-buscar">
+      <label class="alta-lbl">Buscar cliente por código o nombre</label>
+      <input type="text" id="modcli-buscar" class="alta-input" oninput="modcliBuscar()" placeholder="Ej: 15449 o Kiosco Don José">
+      <div id="modcli-resultados" style="margin-top:10px"></div>
+    </div>
+
+    <!-- Paso 2: elegir categoría -->
+    <div id="modcli-paso-categoria" style="display:none">
+      <div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-bottom:14px">
+        <div style="font-size:13px;font-weight:700;color:#202124" id="modcli-cliente-nombre"></div>
+        <div style="font-size:11px;color:#80868b" id="modcli-cliente-id"></div>
+      </div>
+      <div style="font-size:9.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">¿Qué querés modificar?</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button onclick="modcliElegirCategoria('fiscal')" style="width:100%;text-align:left;padding:14px;border:1px solid #e8eaed;border-radius:10px;background:#fff;font-size:13px;font-weight:700;color:#202124;cursor:pointer">🧾 Información Fiscal</button>
+        <button onclick="modcliElegirCategoria('pdv')" style="width:100%;text-align:left;padding:14px;border:1px solid #e8eaed;border-radius:10px;background:#fff;font-size:13px;font-weight:700;color:#202124;cursor:pointer">🏪 Datos del PDV</button>
+        <button onclick="modcliElegirCategoria('geo')" style="width:100%;text-align:left;padding:14px;border:1px solid #e8eaed;border-radius:10px;background:#fff;font-size:13px;font-weight:700;color:#202124;cursor:pointer">📍 Geoposicionamiento</button>
+        <button onclick="modcliElegirCategoria('logistica')" style="width:100%;text-align:left;padding:14px;border:1px solid #e8eaed;border-radius:10px;background:#fff;font-size:13px;font-weight:700;color:#202124;cursor:pointer">🚚 Información Logística</button>
+        <button onclick="modcliElegirCategoria('visita')" style="width:100%;text-align:left;padding:14px;border:1px solid #e8eaed;border-radius:10px;background:#fff;font-size:13px;font-weight:700;color:#202124;cursor:pointer">📅 Visita Vendedores</button>
+      </div>
+      <button onclick="modcliVolverBuscar()" style="width:100%;margin-top:16px;padding:10px;border:1px solid #dadce0;background:#fff;color:#5f6368;border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer">‹ Cambiar cliente</button>
+    </div>
+
+    <!-- Paso 3: formulario de la categoría elegida -->
+    <div id="modcli-paso-form" style="display:none">
+      <div id="modcli-form-content"></div>
+      <div id="modcli-error" style="display:none;background:#fce8e6;color:#c5221f;border-radius:8px;padding:10px 12px;font-size:12px;margin-top:12px;white-space:pre-line"></div>
+      <button id="modcli-btn-enviar" onclick="modcliEnviar()" style="width:100%;margin-top:14px;background:#188038;color:#fff;border:none;border-radius:8px;padding:12px;font-weight:700;font-size:13px;cursor:pointer">Enviar Modificación</button>
+      <button onclick="modcliVolverCategoria()" style="width:100%;margin-top:8px;padding:10px;border:1px solid #dadce0;background:#fff;color:#5f6368;border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer">‹ Elegir otra categoría</button>
+    </div>
+
   </div>
 </div>
 
@@ -1680,6 +1731,374 @@ function lanzPopupVerCatalogo(){
   document.getElementById('lanz-popup').style.display = 'none';
   lanzMarcarVisto();
   abrirCatalogo();
+}
+
+// ── VENDEDOR: Modificación de Cliente ──
+var modcliClienteSel = null; // fila de RAW_DATA del cliente elegido
+var modcliCategoria = null;
+var modcliLat = null, modcliLon = null, modcliMap = null, modcliMarker = null;
+
+const MODCLI_CATEGORIA_LABELS = { fiscal:'Información Fiscal', pdv:'Datos del PDV', geo:'Geoposicionamiento', logistica:'Información Logística', visita:'Visita Vendedores' };
+const MODCLI_CAMPO_LABELS = {
+  razon_social:'Razón Social', nombre_negocio:'Nombre del Negocio', cuit_dni:'CUIT/CUIL/DNI', categoria_iva:'Categoría de IVA',
+  direccion:'Dirección', localidad:'Localidad', canal:'Canal', categoria_pdv:'Categoría PDV', lista_precios:'Lista de precios', dueno_nombre:'Dueño/Comprador',
+  lat:'Latitud', lon:'Longitud',
+  transportista:'Transportista', horario_entrega:'Horario de entrega',
+  dia:'Día', frecuencia:'Frecuencia', orden:'Orden',
+  dia_companero:'Día (compañero)', frecuencia_companero:'Frecuencia (compañero)', orden_companero:'Orden (compañero)'
+};
+
+function modcliAbrir(){
+  switchTab('modificacion-cliente');
+}
+
+function modcliBuscar(){
+  var q = (document.getElementById('modcli-buscar').value||'').trim().toLowerCase();
+  var el = document.getElementById('modcli-resultados');
+  if(!q){ el.innerHTML=''; return; }
+  var vistos = new Set();
+  var resultados = [];
+  RAW_DATA.forEach(function(r){
+    if(r.vend!==currentVendor) return;
+    if(vistos.has(r.id)) return;
+    var enId = String(r.id).toLowerCase().indexOf(q)!==-1;
+    var enNombre = (r.n||'').toLowerCase().indexOf(q)!==-1;
+    if(enId || enNombre){ vistos.add(r.id); resultados.push(r); }
+  });
+  if(!resultados.length){ el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12px;padding:10px">Sin resultados.</div>'; return; }
+  el.innerHTML = resultados.slice(0,20).map(function(r){
+    return '<div onclick="modcliSeleccionarCliente(\''+String(r.id).replace(/'/g,"\\'")+'\')" style="background:#fff;border:1px solid #e8eaed;border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer">'
+      +'<div style="font-size:13px;font-weight:700;color:#202124">'+(r.n||'')+'</div>'
+      +'<div style="font-size:11px;color:#80868b">ID '+r.id+' · '+(r.canal||'')+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function modcliSeleccionarCliente(id){
+  var r = RAW_DATA.find(function(x){ return x.vend===currentVendor && String(x.id)===String(id); });
+  if(!r) return;
+  modcliClienteSel = r;
+  document.getElementById('modcli-cliente-nombre').textContent = r.n||'';
+  document.getElementById('modcli-cliente-id').textContent = 'ID '+r.id+' · '+(r.canal||'')+' · '+(r.tier||'');
+  document.getElementById('modcli-paso-buscar').style.display='none';
+  document.getElementById('modcli-paso-categoria').style.display='block';
+}
+
+function modcliVolverBuscar(){
+  document.getElementById('modcli-paso-categoria').style.display='none';
+  document.getElementById('modcli-paso-buscar').style.display='block';
+  modcliClienteSel = null;
+}
+
+function modcliVolverCategoria(){
+  document.getElementById('modcli-paso-form').style.display='none';
+  document.getElementById('modcli-paso-categoria').style.display='block';
+  modcliCategoria = null;
+}
+
+function modcliVolver(){
+  modcliClienteSel = null; modcliCategoria = null;
+  document.getElementById('modcli-buscar').value='';
+  document.getElementById('modcli-resultados').innerHTML='';
+  document.getElementById('modcli-paso-categoria').style.display='none';
+  document.getElementById('modcli-paso-form').style.display='none';
+  document.getElementById('modcli-paso-buscar').style.display='block';
+  switchTab('oficina');
+}
+
+function modcliElegirCategoria(cat){
+  modcliCategoria = cat;
+  const r = modcliClienteSel;
+  const cont = document.getElementById('modcli-form-content');
+  document.getElementById('modcli-error').style.display='none';
+
+  if(cat==='fiscal'){
+    cont.innerHTML = `
+      <div style="font-size:9.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Información Fiscal</div>
+      <label class="alta-lbl">Razón Social</label>
+      <input type="text" id="modcli-f-razon-social" class="alta-input" value="${(r.n||'').replace(/"/g,'&quot;')}">
+      <label class="alta-lbl">Nombre del Negocio</label>
+      <input type="text" id="modcli-f-nombre-negocio" class="alta-input">
+      <label class="alta-lbl">CUIT/CUIL/DNI</label>
+      <input type="text" id="modcli-f-cuit" class="alta-input">
+      <label class="alta-lbl">Categoría de IVA</label>
+      <select id="modcli-f-categoria-iva" class="alta-input">
+        <option value="">Elegir...</option>
+        <option>Responsable Inscripto</option>
+        <option>Responsable Monotributista</option>
+        <option>No categorizado</option>
+        <option>Exento</option>
+        <option>Consumidor Final</option>
+      </select>
+      <div style="font-size:10.5px;color:#9aa0a6;margin-top:8px">💡 Estos datos no están cargados hoy en el sistema — completá los que corresponda, el resto lo podés dejar en blanco.</div>
+    `;
+  } else if(cat==='pdv'){
+    cont.innerHTML = `
+      <div style="font-size:9.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Datos del PDV</div>
+      <label class="alta-lbl">Dirección</label>
+      <input type="text" id="modcli-f-direccion" class="alta-input">
+      <label class="alta-lbl">Localidad</label>
+      <input type="text" id="modcli-f-localidad" class="alta-input">
+      <label class="alta-lbl">Canal (actual: ${r.canal||'—'})</label>
+      <select id="modcli-f-canal" class="alta-input">
+        <option value="">Sin cambios / Elegir...</option>
+        <option>Kioscos</option>
+        <option>Almacenes</option>
+        <option>Autoservicios</option>
+        <option>No tradicionales</option>
+        <option>EESS</option>
+        <option>Establecimientos Educativos</option>
+        <option>Otro</option>
+      </select>
+      <label class="alta-lbl">Categoría PDV (actual: ${r.tier||'—'})</label>
+      <select id="modcli-f-categoria-pdv" class="alta-input">
+        <option value="">Sin cambios / Elegir...</option>
+        <option>Elite</option>
+        <option>NP</option>
+        <option>N3 Alto</option>
+        <option>N3 Bajo</option>
+        <option>N4 Alto</option>
+        <option>N4 Bajo</option>
+      </select>
+      <label class="alta-lbl">Lista de precios</label>
+      <select id="modcli-f-lista-precios" class="alta-input">
+        <option value="">Elegir...</option>
+        <option>Minorista</option>
+        <option>Autoservicio</option>
+        <option>Petrolera</option>
+        <option>Club Arcor</option>
+        <option>Otra</option>
+      </select>
+      <label class="alta-lbl">Dueño / Comprador</label>
+      <input type="text" id="modcli-f-dueno" class="alta-input">
+    `;
+  } else if(cat==='geo'){
+    const lat = r.la, lon = r.lo;
+    modcliLat = null; modcliLon = null;
+    cont.innerHTML = `
+      <div style="font-size:9.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Geoposicionamiento</div>
+      <div style="font-size:11px;color:#80868b;margin-bottom:8px">Coordenadas actuales: ${lat!=null?lat.toFixed(6):'—'}, ${lon!=null?lon.toFixed(6):'—'}</div>
+      <button onclick="modcliUsarUbicacion()" type="button" style="width:100%;padding:9px;border:1.5px solid #188038;background:#e6f4ea;color:#188038;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;margin-bottom:8px">📍 Usar mi ubicación actual</button>
+      <div id="modcli-map" style="width:100%;height:200px;border-radius:8px;border:1px solid #e8eaed;margin-bottom:4px;display:none"></div>
+      <div id="modcli-coords-txt" style="font-size:10.5px;color:#80868b;margin-bottom:8px">Todavía no cargaste una ubicación nueva.</div>
+    `;
+  } else if(cat==='logistica'){
+    cont.innerHTML = `
+      <div style="font-size:9.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Información Logística</div>
+      <label class="alta-lbl">Transportista</label>
+      <select id="modcli-f-transportista" class="alta-input">
+        <option value="">Elegir...</option>
+        <option>T01 - Abyg</option>
+        <option>T02 - Coto</option>
+        <option>T03 - Balverde</option>
+        <option>T14 - Suarez</option>
+        <option>T18 - Astudillo</option>
+        <option>Otro</option>
+      </select>
+      <label class="alta-lbl">Horario de entrega (actual: ${r.hd||'—'}${r.hd?' a '+(r.hh||''):''})</label>
+      <select id="modcli-f-horario" class="alta-input">
+        <option value="">Sin cambios / Elegir...</option>
+        <option>07:00 a 10:00</option>
+        <option>07:00 a 12:00</option>
+        <option>07:00 a 14:00</option>
+        <option>07:00 a 16:00</option>
+        <option>09:00 a 14:00</option>
+        <option>09:00 a 18:00</option>
+        <option>10:00 a 14:00</option>
+        <option>10:00 a 18:00</option>
+        <option>14:00 a 18:00</option>
+      </select>
+    `;
+  } else if(cat==='visita'){
+    cont.innerHTML = `
+      <div style="font-size:9.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Visita Vendedores</div>
+      <div style="font-size:11px;color:#80868b;margin-bottom:8px">Tu visita actual: ${r.d||'—'} · ${r.freq||'—'} · orden ${r.orden!=null?r.orden:'—'}</div>
+      <label class="alta-lbl">Día propuesto</label>
+      <select id="modcli-f-dia" class="alta-input">
+        <option value="">Sin cambios / Elegir...</option>
+        <option>Lunes</option><option>Martes</option><option>Miércoles</option><option>Jueves</option><option>Viernes</option><option>Sábado</option>
+      </select>
+      <label class="alta-lbl">Frecuencia propuesta</label>
+      <select id="modcli-f-frecuencia" class="alta-input">
+        <option value="">Sin cambios / Elegir...</option>
+        <option>semanal</option><option>quincenal</option><option>mensual</option>
+      </select>
+      <label class="alta-lbl">Orden propuesto</label>
+      <input type="number" id="modcli-f-orden" class="alta-input">
+      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#5f6368;font-weight:700;margin-top:10px;cursor:pointer">
+        <input type="checkbox" id="modcli-f-tiene-companero" onchange="modcliToggleCompanero()"> También modificar la visita del compañero
+      </label>
+      <div id="modcli-companero-box" style="display:none;margin-top:8px">
+        <label class="alta-lbl">Día propuesto (compañero)</label>
+        <select id="modcli-f-dia-companero" class="alta-input">
+          <option value="">Elegir...</option>
+          <option>Lunes</option><option>Martes</option><option>Miércoles</option><option>Jueves</option><option>Viernes</option><option>Sábado</option>
+        </select>
+        <label class="alta-lbl">Frecuencia propuesta (compañero)</label>
+        <select id="modcli-f-frecuencia-companero" class="alta-input">
+          <option value="">Elegir...</option>
+          <option>semanal</option><option>quincenal</option><option>mensual</option>
+        </select>
+        <label class="alta-lbl">Orden propuesto (compañero)</label>
+        <input type="number" id="modcli-f-orden-companero" class="alta-input">
+      </div>
+    `;
+  }
+
+  document.getElementById('modcli-paso-categoria').style.display='none';
+  document.getElementById('modcli-paso-form').style.display='block';
+}
+
+function modcliToggleCompanero(){
+  document.getElementById('modcli-companero-box').style.display = document.getElementById('modcli-f-tiene-companero').checked ? 'block' : 'none';
+}
+
+function modcliUsarUbicacion(){
+  if(!navigator.geolocation){ alert('Tu navegador no soporta geolocalización.'); return; }
+  navigator.geolocation.getCurrentPosition(function(pos){
+    modcliLat = pos.coords.latitude; modcliLon = pos.coords.longitude;
+    modcliMostrarMapa();
+  }, function(err){
+    alert('No se pudo obtener tu ubicación: '+err.message+'\n\nRevisá que le hayas dado permiso de ubicación al navegador.');
+  }, {enableHighAccuracy:true, timeout:15000});
+}
+
+function modcliMostrarMapa(){
+  var mapEl = document.getElementById('modcli-map');
+  mapEl.style.display='block';
+  document.getElementById('modcli-coords-txt').innerHTML = 'Nueva: Lat '+modcliLat.toFixed(6)+' · Lon '+modcliLon.toFixed(6)+' <span style="color:#188038">(arrastrá el pin si hace falta ajustar)</span>';
+  setTimeout(function(){
+    if(!modcliMap){
+      modcliMap = L.map('modcli-map',{zoomControl:true}).setView([modcliLat,modcliLon],17);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}).addTo(modcliMap);
+      modcliMarker = L.marker([modcliLat,modcliLon],{draggable:true}).addTo(modcliMap);
+      modcliMarker.on('dragend', function(){
+        var pos = modcliMarker.getLatLng();
+        modcliLat = pos.lat; modcliLon = pos.lng;
+        document.getElementById('modcli-coords-txt').innerHTML = 'Nueva: Lat '+modcliLat.toFixed(6)+' · Lon '+modcliLon.toFixed(6)+' <span style="color:#188038">(ajustado a mano)</span>';
+      });
+    } else {
+      modcliMap.setView([modcliLat,modcliLon],17);
+      modcliMarker.setLatLng([modcliLat,modcliLon]);
+      modcliMap.invalidateSize();
+    }
+  }, 80);
+}
+
+function modcliBuildEmailHtml(data){
+  function fila(label, valor){
+    return '<tr><td style="padding:4px 10px 4px 0;color:#5f6368;font-size:12.5px;white-space:nowrap;vertical-align:top"><b>'+label+'</b></td>'
+      +'<td style="padding:4px 0;color:#202124;font-size:12.5px">'+(valor!=null && valor!=='' ? valor : '—')+'</td></tr>';
+  }
+  var filas = Object.entries(data.campos).filter(function(e){ return e[1]!=null && e[1]!==''; })
+    .map(function(e){ return fila(MODCLI_CAMPO_LABELS[e[0]]||e[0], e[1]); }).join('');
+  return `
+    <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#2c3e50;color:#fff;padding:16px 20px;border-radius:10px 10px 0 0">
+        <div style="font-size:16px;font-weight:700">✏️ Modificación de cliente pendiente</div>
+        <div style="font-size:12.5px;opacity:.85;margin-top:2px">MiHUB · Ladiar S.A.</div>
+      </div>
+      <div style="border:1px solid #e8eaed;border-top:none;border-radius:0 0 10px 10px;padding:18px 20px">
+        <div style="font-size:15px;font-weight:700;color:#2c3e50;margin-bottom:2px">${data.cliente_nombre||''}</div>
+        <div style="font-size:12.5px;color:#9aa0a6;margin-bottom:14px">ID ${data.cliente_id||''} · ${MODCLI_CATEGORIA_LABELS[data.categoria]||data.categoria}</div>
+        <table style="border-collapse:collapse;width:100%">
+          ${fila('Vendedor', (data.vendedor_nombre||'')+' ('+(data.vendedor_code||'')+')')}
+          ${fila('Zona', data.zona)}
+          ${filas}
+        </table>
+        <div style="margin-top:18px;padding-top:14px;border-top:1px solid #f1f3f4;font-size:12px;color:#9aa0a6">
+          Entrá a MiHUB (usuario Admin, pestaña ABM CLIENTES) para revisarla.
+        </div>
+      </div>
+    </div>`;
+}
+
+async function modcliEnviar(){
+  const errEl = document.getElementById('modcli-error');
+  errEl.style.display='none';
+  const r = modcliClienteSel;
+  const cat = modcliCategoria;
+  if(!r || !cat) return;
+
+  const val = (id)=>{ const el=document.getElementById(id); return el ? (el.value||'').trim() : ''; };
+
+  let campos = {};
+  let huboAlgunCampo = false;
+
+  if(cat==='fiscal'){
+    campos = {
+      razon_social: val('modcli-f-razon-social'), nombre_negocio: val('modcli-f-nombre-negocio'),
+      cuit_dni: val('modcli-f-cuit'), categoria_iva: val('modcli-f-categoria-iva')
+    };
+    huboAlgunCampo = !!(campos.cuit_dni || campos.categoria_iva || campos.nombre_negocio || (campos.razon_social && campos.razon_social!==(r.n||'')));
+  } else if(cat==='pdv'){
+    campos = {
+      direccion: val('modcli-f-direccion'), localidad: val('modcli-f-localidad'),
+      canal: val('modcli-f-canal'), categoria_pdv: val('modcli-f-categoria-pdv'),
+      lista_precios: val('modcli-f-lista-precios'), dueno_nombre: val('modcli-f-dueno')
+    };
+    huboAlgunCampo = Object.values(campos).some(v=>v);
+  } else if(cat==='geo'){
+    if(modcliLat==null || modcliLon==null){
+      errEl.style.display='block'; errEl.textContent='Cargá la nueva ubicación antes de enviar.';
+      return;
+    }
+    campos = { lat: modcliLat, lon: modcliLon };
+    huboAlgunCampo = true;
+  } else if(cat==='logistica'){
+    campos = { transportista: val('modcli-f-transportista'), horario_entrega: val('modcli-f-horario') };
+    huboAlgunCampo = Object.values(campos).some(v=>v);
+  } else if(cat==='visita'){
+    campos = { dia: val('modcli-f-dia'), frecuencia: val('modcli-f-frecuencia'), orden: val('modcli-f-orden') };
+    const tieneCompanero = document.getElementById('modcli-f-tiene-companero').checked;
+    if(tieneCompanero){
+      campos.dia_companero = val('modcli-f-dia-companero');
+      campos.frecuencia_companero = val('modcli-f-frecuencia-companero');
+      campos.orden_companero = val('modcli-f-orden-companero');
+    }
+    huboAlgunCampo = Object.values(campos).some(v=>v);
+  }
+
+  if(!huboAlgunCampo){
+    errEl.style.display='block';
+    errEl.textContent = 'Completá al menos un campo para enviar la modificación.';
+    return;
+  }
+
+  const btn = document.getElementById('modcli-btn-enviar');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+
+  try{
+    const { db, collection, addDoc, serverTimestamp } = window.fb;
+    const data = {
+      cliente_id: r.id, cliente_nombre: r.n,
+      categoria: cat, campos,
+      vendedor_code: getVendorCode(), vendedor_nombre: currentVendor, zona: r.zona,
+      estado: 'pendiente', fecha_creacion: serverTimestamp()
+    };
+    await addDoc(collection(db,'modificaciones_pendientes'), data);
+
+    try{
+      await addDoc(collection(db,'mail'), {
+        to: ALTAS_NOTIFY_EMAILS,
+        message: {
+          subject: '✏️ Modificación de cliente pendiente: '+(r.n||r.id),
+          html: modcliBuildEmailHtml(data)
+        }
+      });
+    }catch(mailErr){
+      console.error('[modcliEnviar] no se pudo encolar el mail de aviso', mailErr);
+    }
+
+    alert('✅ Modificación enviada correctamente. El administrativo la va a revisar y actualizar en el ERP.');
+    modcliVolver();
+  }catch(err){
+    console.error('[modcliEnviar]', err);
+    errEl.style.display='block';
+    errEl.textContent = 'Error al enviar: '+(err.message||err);
+  }finally{
+    btn.disabled=false; btn.textContent='Enviar Modificación';
+  }
 }
 
 function switchTab(tab){
