@@ -1830,6 +1830,7 @@ function lanzPopupVerCatalogo(){
 
 // ── VENDEDOR: Modificación de Cliente ──
 var modcliClienteSel = null; // fila de RAW_DATA del cliente elegido
+var modcliFichaSel = {}; // datos de clientes_ficha para ese cliente (si existen)
 var modcliCategoria = null;
 var modcliLat = null, modcliLon = null, modcliMap = null, modcliMarker = null;
 
@@ -1869,20 +1870,31 @@ function modcliBuscar(){
   }).join('');
 }
 
-function modcliSeleccionarCliente(id){
+async function modcliSeleccionarCliente(id){
   var r = RAW_DATA.find(function(x){ return x.vend===currentVendor && String(x.id)===String(id); });
   if(!r) return;
   modcliClienteSel = r;
+  modcliFichaSel = {};
   document.getElementById('modcli-cliente-nombre').textContent = r.n||'';
-  document.getElementById('modcli-cliente-id').textContent = 'ID '+r.id+' · '+(r.canal||'')+' · '+(r.tier||'');
+  document.getElementById('modcli-cliente-id').textContent = 'ID '+r.id+' · '+(r.canal||'')+' · '+(r.tier||'')+' · Cargando datos...';
   document.getElementById('modcli-paso-buscar').style.display='none';
   document.getElementById('modcli-paso-categoria').style.display='block';
+
+  try{
+    const { db, doc, getDoc } = window.fb;
+    const snap = await getDoc(doc(db,'clientes_ficha',String(id)));
+    if(snap.exists()) modcliFichaSel = snap.data();
+  }catch(err){
+    console.error('[modcliSeleccionarCliente] ficha', err);
+  }
+  document.getElementById('modcli-cliente-id').textContent = 'ID '+r.id+' · '+(r.canal||'')+' · '+(r.tier||'');
 }
 
 function modcliVolverBuscar(){
   document.getElementById('modcli-paso-categoria').style.display='none';
   document.getElementById('modcli-paso-buscar').style.display='block';
   modcliClienteSel = null;
+  modcliFichaSel = {};
 }
 
 function modcliVolverCategoria(){
@@ -1892,7 +1904,7 @@ function modcliVolverCategoria(){
 }
 
 function modcliVolver(){
-  modcliClienteSel = null; modcliCategoria = null;
+  modcliClienteSel = null; modcliCategoria = null; modcliFichaSel = {};
   document.getElementById('modcli-buscar').value='';
   document.getElementById('modcli-resultados').innerHTML='';
   document.getElementById('modcli-paso-categoria').style.display='none';
@@ -1904,6 +1916,7 @@ function modcliVolver(){
 function modcliElegirCategoria(cat){
   modcliCategoria = cat;
   const r = modcliClienteSel;
+  const f = modcliFichaSel || {};
   const cont = document.getElementById('modcli-form-content');
   document.getElementById('modcli-error').style.display='none';
 
@@ -1911,29 +1924,30 @@ function modcliElegirCategoria(cat){
     cont.innerHTML = `
       <div style="font-size:9.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Información Fiscal</div>
       <label class="alta-lbl">Razón Social</label>
-      <input type="text" id="modcli-f-razon-social" class="alta-input" value="${(r.n||'').replace(/"/g,'&quot;')}">
+      <input type="text" id="modcli-f-razon-social" class="alta-input" value="${(f.razon_social||r.n||'').replace(/"/g,'&quot;')}">
       <label class="alta-lbl">Nombre del Negocio</label>
-      <input type="text" id="modcli-f-nombre-negocio" class="alta-input">
+      <input type="text" id="modcli-f-nombre-negocio" class="alta-input" value="${(r.n||'').replace(/"/g,'&quot;')}">
       <label class="alta-lbl">CUIT/CUIL/DNI</label>
-      <input type="text" id="modcli-f-cuit" class="alta-input">
-      <label class="alta-lbl">Categoría de IVA</label>
+      <input type="text" id="modcli-f-cuit" class="alta-input" value="${(f.cuit||'').replace(/"/g,'&quot;')}">
+      <label class="alta-lbl">Categoría de IVA (actual: ${f.categoria_iva||'—'})</label>
       <select id="modcli-f-categoria-iva" class="alta-input">
-        <option value="">Elegir...</option>
+        <option value="">Sin cambios / Elegir...</option>
         <option>Responsable Inscripto</option>
         <option>Responsable Monotributista</option>
         <option>No categorizado</option>
         <option>Exento</option>
         <option>Consumidor Final</option>
       </select>
-      <div style="font-size:10.5px;color:#9aa0a6;margin-top:8px">💡 Estos datos no están cargados hoy en el sistema — completá los que corresponda, el resto lo podés dejar en blanco.</div>
+      <div style="font-size:10.5px;color:#9aa0a6;margin-top:8px">💡 Revisá los datos precargados y corregí lo que corresponda.</div>
     `;
   } else if(cat==='pdv'){
+    const direccionActual = [f.calle, f.altura].filter(Boolean).join(' ');
     cont.innerHTML = `
       <div style="font-size:9.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Datos del PDV</div>
       <label class="alta-lbl">Dirección</label>
-      <input type="text" id="modcli-f-direccion" class="alta-input">
+      <input type="text" id="modcli-f-direccion" class="alta-input" value="${direccionActual.replace(/"/g,'&quot;')}">
       <label class="alta-lbl">Localidad</label>
-      <input type="text" id="modcli-f-localidad" class="alta-input">
+      <input type="text" id="modcli-f-localidad" class="alta-input" value="${(f.localidad||'').replace(/"/g,'&quot;')}">
       <label class="alta-lbl">Canal (actual: ${r.canal||'—'})</label>
       <select id="modcli-f-canal" class="alta-input">
         <option value="">Sin cambios / Elegir...</option>
@@ -1955,9 +1969,9 @@ function modcliElegirCategoria(cat){
         <option>N4 Alto</option>
         <option>N4 Bajo</option>
       </select>
-      <label class="alta-lbl">Lista de precios</label>
+      <label class="alta-lbl">Lista de precios (actual: ${f.lista_precios||'—'})</label>
       <select id="modcli-f-lista-precios" class="alta-input">
-        <option value="">Elegir...</option>
+        <option value="">Sin cambios / Elegir...</option>
         <option>Minorista</option>
         <option>Autoservicio</option>
         <option>Petrolera</option>
@@ -1965,7 +1979,7 @@ function modcliElegirCategoria(cat){
         <option>Otra</option>
       </select>
       <label class="alta-lbl">Dueño / Comprador</label>
-      <input type="text" id="modcli-f-dueno" class="alta-input">
+      <input type="text" id="modcli-f-dueno" class="alta-input" value="${((f.personas&&f.personas[0]&&(f.personas[0].titular||f.personas[0].nombre))||'').replace(/"/g,'&quot;')}">
     `;
   } else if(cat==='geo'){
     const lat = r.la, lon = r.lo;
@@ -1980,9 +1994,9 @@ function modcliElegirCategoria(cat){
   } else if(cat==='logistica'){
     cont.innerHTML = `
       <div style="font-size:9.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Información Logística</div>
-      <label class="alta-lbl">Transportista</label>
+      <label class="alta-lbl">Transportista (actual: ${f.transportista||'—'})</label>
       <select id="modcli-f-transportista" class="alta-input">
-        <option value="">Elegir...</option>
+        <option value="">Sin cambios / Elegir...</option>
         <option>T01 - Abyg</option>
         <option>T02 - Coto</option>
         <option>T03 - Balverde</option>
@@ -4306,6 +4320,34 @@ async function adminEliminarItem(tipo, id){
   }
 }
 
+async function adminEliminarTodosRechazados(){
+  // Respeta el filtro de Tipo activo (Todos/Altas/Modificaciones), pero apunta
+  // siempre a los rechazados sin importar qué filtro de Estado esté puesto.
+  const base = adminAbmTipoFiltro==='todos' ? adminAltasCache : adminAltasCache.filter(a=>a._tipo===adminAbmTipoFiltro);
+  const rechazados = base.filter(a=>(a.estado||'pendiente')==='rechazado');
+
+  if(!rechazados.length){ alert('No hay elementos rechazados para eliminar en este filtro.'); return; }
+  if(!confirm('¿Eliminar definitivamente '+rechazados.length+' registro(s) rechazado(s)? Esta acción no se puede deshacer.')) return;
+
+  try{
+    const { db, doc, writeBatch } = window.fb;
+    const LOTE = 400;
+    for(let i=0;i<rechazados.length;i+=LOTE){
+      const batch = writeBatch(db);
+      rechazados.slice(i,i+LOTE).forEach(a=>{
+        const coleccion = a._tipo==='alta' ? 'altas_pendientes' : 'modificaciones_pendientes';
+        batch.delete(doc(db,coleccion,a.id));
+      });
+      await batch.commit();
+    }
+    await adminCargarAltas();
+    adminShowToast('Se eliminaron '+rechazados.length+' registro(s) rechazado(s).');
+  }catch(err){
+    console.error('[adminEliminarTodosRechazados]', err);
+    alert('Error al eliminar en lote: '+(err.message||err));
+  }
+}
+
 async function adminExportAltasExcel(){
   let lista = adminAbmTipoFiltro==='todos' ? adminAltasCache : adminAltasCache.filter(a=>a._tipo===adminAbmTipoFiltro);
   lista = adminAltasFiltro==='todas' ? lista : lista.filter(a=>(a.estado||'pendiente')===adminAltasFiltro);
@@ -5219,6 +5261,7 @@ async function adminParseMaestro(file){
   // (por compatibilidad con archivos viejos que no tengan ese nombre exacto).
   const wsName = wb.SheetNames.find(n=>n.trim().toLowerCase()==='maestro general') || wb.SheetNames[0];
   const ws = wb.Sheets[wsName];
+  console.log('[adminParseMaestro] hojas del archivo:', wb.SheetNames, '| usando para Maestro General:', wsName);
   const aoa = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:null});
 
   const headerRow = aoa[0].map(h=>String(h||'').trim());
@@ -5305,6 +5348,7 @@ async function adminParseMaestro(file){
 
   // Hoja "Personas": contactos asociados a cada cliente (puede haber varios por cliente)
   const wsPersonasName = wb.SheetNames.find(n=>n.trim().toLowerCase()==='personas');
+  console.log('[adminParseMaestro] hoja Personas encontrada:', wsPersonasName || '(NO encontrada)');
   if(wsPersonasName){
     const wsP = wb.Sheets[wsPersonasName];
     const aoaP = XLSX.utils.sheet_to_json(wsP, {header:1, raw:true, defval:null});
@@ -5385,6 +5429,8 @@ async function adminProcessImport(){
     await ensureSheetJSVend();
     const maestroMap = await adminParseMaestro(maestroFile);
     adminPendingFichaMap = maestroMap;
+    const conFicha = [...maestroMap.values()].filter(v=>v.ficha && (v.ficha.razon_social || v.ficha.cuit)).length;
+    console.log('[adminProcessImport] clientes en el maestro:', maestroMap.size, '| con datos de ficha (Razón Social o CUIT) reconocidos:', conFicha);
     const repartoRows = await adminParseReparto(repartoFile);
 
     // Índice de filas ya existentes por vendedor+cliente, para preservar patrón de semanas
@@ -5462,6 +5508,7 @@ async function adminProcessImport(){
       `• ${stats.actualizados} clientes actualizados (ya existían)\n` +
       `• ${stats.nuevos} clientes nuevos\n` +
       `• ${newRows.length} filas de visita en total (cliente × semana × día)\n` +
+      `• ${conFicha} de ${maestroMap.size} clientes del maestro con datos de Ficha reconocidos (Razón Social/CUIT)\n` +
       (stats.zonaNoReconocida ? `• ${stats.zonaNoReconocida} filas con zona fuera de las 7 zonas del sistema (omitidas)\n` : '') +
       (stats.sinDatos ? `• ${stats.sinDatos} filas sin nombre/tier/coordenadas suficientes (omitidas)\n` : '') +
       (stats.vendedorDesconocido ? `• ${stats.vendedorDesconocido} filas con código de vendedor desconocido (omitidas)\n` : '') +
@@ -5562,7 +5609,11 @@ async function adminSyncFichaClientesFirestore(){
       await batch.commit();
     }
 
-    const entries = [...adminPendingFichaMap.entries()].filter(([codigo])=>idsActuales.has(codigo));
+    // Ya no filtramos por idsActuales acá: subimos la ficha de TODOS los códigos
+    // que aparezcan en el Maestro General, tengan o no ruta asignada esta semana
+    // (evita que un desfasaje de formato entre el código del maestro y el del
+    // reparto tire abajo la sincronización entera sin ningún aviso).
+    const entries = [...adminPendingFichaMap.entries()];
     for(let i=0;i<entries.length;i+=LOTE){
       const batch = writeBatch(db);
       entries.slice(i,i+LOTE).forEach(([codigo, info])=>{
@@ -5570,6 +5621,8 @@ async function adminSyncFichaClientesFirestore(){
       });
       await batch.commit();
     }
+    console.log('[adminSyncFichaClientesFirestore] fichas subidas:', entries.length);
+    adminShowToast('✅ '+entries.length+' fichas de cliente sincronizadas.');
     adminPendingFichaMap = null;
   }catch(err){
     console.error('[adminSyncFichaClientesFirestore]', err);
@@ -6496,6 +6549,7 @@ function supRenderHelados(data){
     <div style="background:#f8f9fa;border-bottom:1px solid #e8eaed;padding:0 16px 10px;display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;flex-shrink:0">
       <div id="admin-altas-filtros" style="display:flex;gap:6px;flex-wrap:wrap"></div>
       <div style="display:flex;gap:8px">
+        <button onclick="adminEliminarTodosRechazados()" style="font-size:11px;padding:6px 12px;border:1.5px solid #ea4335;color:#ea4335;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">🗑 Eliminar rechazadas</button>
         <button onclick="adminExportAltasExcel()" style="font-size:11px;padding:6px 12px;border:1.5px solid #188038;color:#188038;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">⬇ Exportar Excel</button>
         <button onclick="adminCargarAltas()" style="font-size:11px;padding:6px 12px;border:1.5px solid #2c3e50;color:#2c3e50;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">🔄 Actualizar</button>
       </div>
