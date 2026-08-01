@@ -367,10 +367,7 @@ async function subirDiaYReconstruirMesVenta(){
     const listado = await listAll(ref(storage,'venta_vendedores/dias/'));
     const archivosDelMes = listado.items.filter(function(item){ return item.name.startsWith(mesActual); });
 
-    // 3. Descarga y suma todos esos días (agrupando por vendedor+canal+cliente+rubro+segmento —
-    // SIN producto: ese campo no se usa en ninguna pantalla de la app y multiplicaba mucho la
-    // cantidad de filas del acumulado mensual, hasta el punto de romper la subida a fin de mes.
-    // El detalle de producto sigue completo en los archivos diarios crudos, por las dudas.)
+    // 3. Descarga y suma todos esos días (agrupando por vendedor+canal+cliente+rubro+segmento+producto)
     const acumulado = {};
     for(const item of archivosDelMes){
       pasoActual = 'descargando y sumando el día '+item.name+' ('+(archivosDelMes.indexOf(item)+1)+' de '+archivosDelMes.length+')';
@@ -380,9 +377,9 @@ async function subirDiaYReconstruirMesVenta(){
       const dia = JSON.parse(texto);
       const idx = {}; dia.k.forEach(function(campo,i){ idx[campo]=i; });
       dia.r.forEach(function(fila){
-        const key = [fila[idx.vc],fila[idx.ca],fila[idx.cl],fila[idx.ru],fila[idx.sg]].join('|');
+        const key = [fila[idx.vc],fila[idx.ca],fila[idx.cl],fila[idx.ru],fila[idx.sg],fila[idx.pr]].join('|');
         if(!acumulado[key]){
-          acumulado[key] = {vc:fila[idx.vc],ca:fila[idx.ca],cl:fila[idx.cl],ru:fila[idx.ru],sg:fila[idx.sg],
+          acumulado[key] = {vc:fila[idx.vc],ca:fila[idx.ca],cl:fila[idx.cl],ru:fila[idx.ru],sg:fila[idx.sg],pr:fila[idx.pr],
             vp:0, mgAcum:0, bnAcum:0, bu:0, kg:0, tk:0, pv:0, fc:''};
         }
         const a = acumulado[key];
@@ -403,9 +400,9 @@ async function subirDiaYReconstruirMesVenta(){
     const filasFinal = Object.values(acumulado).map(function(a){
       const mg = a.vp>0 ? (a.mgAcum/a.vp) : 0;
       const bn = a.vp>0 ? (a.bnAcum/a.vp) : 0;
-      return [a.vc,a.ca,a.cl,a.ru,a.sg, a.vp, mg, bn, a.bu, a.kg, a.tk, a.pv, a.fc];
+      return [a.vc,a.ca,a.cl,a.ru,a.sg,a.pr, a.vp, mg, bn, a.bu, a.kg, a.tk, a.pv, a.fc];
     });
-    const mesData = {k:['vc','ca','cl','ru','sg','vp','mg','bn','bu','kg','tk','pv','fc'], r: filasFinal};
+    const mesData = {k:['vc','ca','cl','ru','sg','pr','vp','mg','bn','bu','kg','tk','pv','fc'], r: filasFinal};
     console.log('[subirDiaYReconstruirMesVenta] tamaño del acumulado mensual (bytes):', JSON.stringify(mesData).length, '| filas:', filasFinal.length);
 
     // 5. Sube el acumulado reconstruido como latest.json + UNA copia con fecha en
@@ -423,7 +420,7 @@ async function subirDiaYReconstruirMesVenta(){
     const borradosDias = await limpiarCarpetaVieja('venta_vendedores','dias');
 
     showStatus('status-venta','ok',
-      '✓ '+fechas.length+' día(s) subidos ('+fechas.join(', ')+'). Acumulado del mes reconstruido con '+archivosDelMes.length+' días en total ('+filasFinal.length+' líneas, sin nivel de producto para aliviar el tamaño del archivo).'
+      '✓ '+fechas.length+' día(s) subidos ('+fechas.join(', ')+'). Acumulado del mes reconstruido con '+archivosDelMes.length+' días en total ('+filasFinal.length+' líneas, con detalle de producto).'
       + ((borradosHist||borradosDias) ? ('\n🧹 Limpieza: '+borradosHist+' históricos y '+borradosDias+' días viejos borrados (+2 meses).') : ''));
   }catch(err){
     console.error('[subirDiaYReconstruirMesVenta] falló en el paso: '+pasoActual, err);
