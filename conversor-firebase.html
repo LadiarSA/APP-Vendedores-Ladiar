@@ -70,6 +70,10 @@
   const auth = getAuth(app);
   const db = getFirestore(app);
   const storage = getStorage(app);
+  // Le damos más tiempo antes de rendirse en archivos grandes o conexiones lentas
+  // (por defecto son 2 minutos; lo llevamos a 5 para subidas y descargas).
+  storage.maxUploadRetryTime = 5*60*1000;
+  storage.maxOperationRetryTime = 5*60*1000;
 
   window.fb = { auth, db, storage, signInWithEmailAndPassword, signOut, getIdTokenResult,
     collection, getDocs, doc, setDoc, deleteDoc, writeBatch,
@@ -342,11 +346,13 @@ async function subirDiaYReconstruirMesVenta(){
 
   const fechas = Object.keys(porFecha).sort();
   showStatus('status-venta','info','Subiendo '+fechas.length+' día(s)...');
+  let pasoActual = 'inicio';
   try{
     const { storage, ref, uploadBytes, listAll, getBytes } = window.fb;
 
     // 1. Sube cada día tal cual (con detalle de producto) a dias/{fecha}.json
     for(const fecha of fechas){
+      pasoActual = 'subiendo el archivo crudo del día '+fecha;
       const contenidoDia = new Blob([JSON.stringify(porFecha[fecha])], {type:'application/json'});
       await uploadBytes(ref(storage, 'venta_vendedores/dias/'+fecha+'.json'), contenidoDia);
       showStatus('status-venta','info','Subido día '+fecha+'...');
@@ -355,22 +361,28 @@ async function subirDiaYReconstruirMesVenta(){
     // 2. Junta todos los días del MES EN CURSO que haya en Storage (usamos el mes
     // de la última fecha subida como referencia)
     showStatus('status-venta','info','Reconstruyendo el acumulado del mes...');
+    pasoActual = 'listando los archivos del mes en Storage';
     const fechaMasReciente = fechas[fechas.length-1];
     const mesActual = fechaMasReciente.slice(0,7); // ej. "2026-07"
     const listado = await listAll(ref(storage,'venta_vendedores/dias/'));
     const archivosDelMes = listado.items.filter(function(item){ return item.name.startsWith(mesActual); });
 
-    // 3. Descarga y suma todos esos días (agrupando por vendedor+canal+cliente+rubro+segmento+producto)
+    // 3. Descarga y suma todos esos días (agrupando por vendedor+canal+cliente+rubro+segmento —
+    // SIN producto: ese campo no se usa en ninguna pantalla de la app y multiplicaba mucho la
+    // cantidad de filas del acumulado mensual, hasta el punto de romper la subida a fin de mes.
+    // El detalle de producto sigue completo en los archivos diarios crudos, por las dudas.)
     const acumulado = {};
     for(const item of archivosDelMes){
+      pasoActual = 'descargando y sumando el día '+item.name+' ('+(archivosDelMes.indexOf(item)+1)+' de '+archivosDelMes.length+')';
+      showStatus('status-venta','info','Sumando '+item.name+' ('+(archivosDelMes.indexOf(item)+1)+'/'+archivosDelMes.length+')...');
       const bytes = await getBytes(item);
       const texto = new TextDecoder('utf-8').decode(bytes);
       const dia = JSON.parse(texto);
       const idx = {}; dia.k.forEach(function(campo,i){ idx[campo]=i; });
       dia.r.forEach(function(fila){
-        const key = [fila[idx.vc],fila[idx.ca],fila[idx.cl],fila[idx.ru],fila[idx.sg],fila[idx.pr]].join('|');
+        const key = [fila[idx.vc],fila[idx.ca],fila[idx.cl],fila[idx.ru],fila[idx.sg]].join('|');
         if(!acumulado[key]){
-          acumulado[key] = {vc:fila[idx.vc],ca:fila[idx.ca],cl:fila[idx.cl],ru:fila[idx.ru],sg:fila[idx.sg],pr:fila[idx.pr],
+          acumulado[key] = {vc:fila[idx.vc],ca:fila[idx.ca],cl:fila[idx.cl],ru:fila[idx.ru],sg:fila[idx.sg],
             vp:0, mgAcum:0, bnAcum:0, bu:0, kg:0, tk:0, pv:0, fc:''};
         }
         const a = acumulado[key];
@@ -387,29 +399,35 @@ async function subirDiaYReconstruirMesVenta(){
     }
 
     // 4. Arma las filas finales (margen/bonificación ya ponderados)
+    pasoActual = 'armando las filas finales del acumulado';
     const filasFinal = Object.values(acumulado).map(function(a){
       const mg = a.vp>0 ? (a.mgAcum/a.vp) : 0;
       const bn = a.vp>0 ? (a.bnAcum/a.vp) : 0;
-      return [a.vc,a.ca,a.cl,a.ru,a.sg,a.pr, a.vp, mg, bn, a.bu, a.kg, a.tk, a.pv, a.fc];
+      return [a.vc,a.ca,a.cl,a.ru,a.sg, a.vp, mg, bn, a.bu, a.kg, a.tk, a.pv, a.fc];
     });
-    const mesData = {k:['vc','ca','cl','ru','sg','pr','vp','mg','bn','bu','kg','tk','pv','fc'], r: filasFinal};
+    const mesData = {k:['vc','ca','cl','ru','sg','vp','mg','bn','bu','kg','tk','pv','fc'], r: filasFinal};
+    console.log('[subirDiaYReconstruirMesVenta] tamaño del acumulado mensual (bytes):', JSON.stringify(mesData).length, '| filas:', filasFinal.length);
 
     // 5. Sube el acumulado reconstruido como latest.json + UNA copia con fecha en
     // histórico (la del día más reciente subido en esta tanda)
+    pasoActual = 'subiendo el acumulado mensual (latest.json)';
+    showStatus('status-venta','info','Subiendo el acumulado del mes ('+filasFinal.length+' líneas)...');
     const contenidoMes = new Blob([JSON.stringify(mesData)], {type:'application/json'});
     await uploadBytes(ref(storage,'venta_vendedores/latest.json'), contenidoMes);
+    pasoActual = 'subiendo la copia histórica del acumulado';
     await uploadBytes(ref(storage,'venta_vendedores/historico/'+fechaMasReciente+'.json'), contenidoMes);
 
     // 6. Limpieza de archivos viejos (2 meses de margen), tanto histórico como días crudos
+    pasoActual = 'limpiando archivos viejos';
     const borradosHist = await limpiarCarpetaVieja('venta_vendedores','historico');
     const borradosDias = await limpiarCarpetaVieja('venta_vendedores','dias');
 
     showStatus('status-venta','ok',
-      '✓ '+fechas.length+' día(s) subidos ('+fechas.join(', ')+'). Acumulado del mes reconstruido con '+archivosDelMes.length+' días en total ('+filasFinal.length+' líneas, con detalle de producto).'
+      '✓ '+fechas.length+' día(s) subidos ('+fechas.join(', ')+'). Acumulado del mes reconstruido con '+archivosDelMes.length+' días en total ('+filasFinal.length+' líneas, sin nivel de producto para aliviar el tamaño del archivo).'
       + ((borradosHist||borradosDias) ? ('\n🧹 Limpieza: '+borradosHist+' históricos y '+borradosDias+' días viejos borrados (+2 meses).') : ''));
   }catch(err){
-    console.error(err);
-    showStatus('status-venta','err','Error: '+err.message);
+    console.error('[subirDiaYReconstruirMesVenta] falló en el paso: '+pasoActual, err);
+    showStatus('status-venta','err','Error en el paso "'+pasoActual+'": '+err.message+'\n\nCódigo: '+(err.code||'—'));
   }
 }
 
@@ -501,6 +519,30 @@ async function subirClientesFirestore(){
     }
 
     showStatus('status-raw','ok','✓ Sincronizado con Firestore: '+ids.length+' clientes subidos/actualizados, '+idsABorrar.length+' borrados (ya no estaban en el archivo nuevo).');
+
+    // Sincronizamos también la Ficha de Cliente (datos ricos del Maestro General
+    // + Personas), si se procesó junto con este archivo.
+    const fichaMap = window._fichaMapOut;
+    if(fichaMap){
+      showStatus('status-raw','info','Sincronizando fichas de cliente...');
+      const snapFicha = await getDocs(collection(db,'clientes_ficha'));
+      const idsFichaViejos = [];
+      snapFicha.forEach(function(d){ idsFichaViejos.push(d.id); });
+      const idsFichaABorrar = idsFichaViejos.filter(function(id){ return !idsNuevos.has(id); });
+
+      const entriesFicha = [...fichaMap.entries()];
+      for(let i=0;i<entriesFicha.length;i+=LOTE){
+        const batch = writeBatch(db);
+        entriesFicha.slice(i,i+LOTE).forEach(function(e){ batch.set(doc(db,'clientes_ficha',e[0]), e[1].ficha); });
+        await batch.commit();
+      }
+      for(let i=0;i<idsFichaABorrar.length;i+=LOTE){
+        const batch = writeBatch(db);
+        idsFichaABorrar.slice(i,i+LOTE).forEach(function(id){ batch.delete(doc(db,'clientes_ficha',id)); });
+        await batch.commit();
+      }
+      showStatus('status-raw','ok','✓ Sincronizado con Firestore: '+ids.length+' clientes y '+entriesFicha.length+' fichas subidas/actualizadas.');
+    }
   }catch(err){
     console.error(err);
     showStatus('status-raw','err','Error al sincronizar: '+err.message);
@@ -546,14 +588,34 @@ async function procesarRaw(){
   showStatus('status-raw', 'info', 'Procesando...');
 
   try{
-    var m = await smartReadTabular(fMaestro);
-    var h = m.header;
+    // Leemos el workbook completo (no por smartReadTabular, que solo da la
+    // primera hoja) para poder tomar tanto "Maestro General" como "Personas".
+    var maestroBuf = await readFileAsArrayBuffer(fMaestro);
+    var wbMaestro = XLSX.read(maestroBuf, {type:'array'});
+    var wsMaestroName = wbMaestro.SheetNames.find(function(n){ return n.trim().toLowerCase()==='maestro general'; }) || wbMaestro.SheetNames[0];
+    var aoaMaestro = XLSX.utils.sheet_to_json(wbMaestro.Sheets[wsMaestroName], {header:1, raw:true, defval:null});
+    var h = (aoaMaestro[0]||[]).map(function(x){ return String(x==null?'':x).trim(); });
+    var mRows = aoaMaestro.slice(1);
+    console.log('[procesarRaw] hojas del archivo:', wbMaestro.SheetNames, '| usando para Maestro General:', wsMaestroName);
+
     var iCodigo = ci(h,'Código'), iNombre = ci(h,'Nombre'), iCategoria = ci(h,'Categoría'),
         iCanal = ci(h,'Canal'), iZona = ci(h,'Zona de Ventas'), iLat = ci(h,'Lat.'),
         iLon = ci(h,'Long.');
 
+    // Columnas adicionales, solo para la Ficha de Cliente (no afectan el ruteo).
+    var iRazonSocial = ci(h,'Razón Social'), iCuit = ci(h,'CUIT'), iCategoriaIva = ci(h,'Categoría de IVA'),
+        iCondicionVenta = ci(h,'Condición de Venta'), iListaPrecios = ci(h,'Lista de Precios'),
+        iSubcanales = ci(h,'Subcanales'), iZonaReparto = ci(h,'Zona de Reparto'),
+        iEsquemaComercial = ci(h,'Esquema Comercial'), iTipoCliente = ci(h,'Tipo de Cliente'),
+        iCalle = ci(h,'Calle'), iAltura = ci(h,'Altura'), iLocalidad = ci(h,'Localidad'),
+        iProvincia = ci(h,'Provincia'), iCodPostal = ci(h,'Cód. Postal'), iBarrio = ci(h,'Barrio'),
+        iTelefono = ci(h,'Teléfono'), iMail = ci(h,'Dirección de Mail'),
+        iTransportista = ci(h,'Transportista Defecto'), iPlazoEntrega = ci(h,'Plazo de Entrega'),
+        iMotivo = ci(h,'Motivo'), iFechaAlta = ci(h,'Fecha de Alta'), iObservaciones = ci(h,'Observaciones'),
+        iEstadoCliente = ci(h,'Estado');
+
     var maestro = new Map();
-    m.rows.forEach(function(row){
+    mRows.forEach(function(row){
       if(row[iCodigo]===null || row[iCodigo]==='' || row[iCodigo]===undefined) return;
       var codigo = String(parseInt(row[iCodigo])).trim();
       var catRaw = String(row[iCategoria]||'').replace(/CLIENTE/i,'').trim().toUpperCase();
@@ -561,11 +623,49 @@ async function procesarRaw(){
       var zonaRaw = String(row[iZona]||'').trim().replace(/\s+/g,' ');
       var zonaCorta = ZONA_MAESTRO_TO_CORTA[zonaRaw] || null;
       var lat = parseFloat(row[iLat]), lon = parseFloat(row[iLon]);
+      var val = function(idx){ return idx>=0 && row[idx]!=null ? String(row[idx]).trim() : ''; };
       maestro.set(codigo, {
         nombre: String(row[iNombre]||'').trim(), tier: tier, canal: String(row[iCanal]||'').trim(),
-        zonaCorta: zonaCorta, lat: isNaN(lat)?null:lat, lon: isNaN(lon)?null:lon
+        zonaCorta: zonaCorta, lat: isNaN(lat)?null:lat, lon: isNaN(lon)?null:lon,
+        ficha: {
+          razon_social: val(iRazonSocial), cuit: val(iCuit), categoria_iva: val(iCategoriaIva),
+          condicion_venta: val(iCondicionVenta), lista_precios: val(iListaPrecios),
+          subcanales: val(iSubcanales), zona_reparto: val(iZonaReparto),
+          esquema_comercial: val(iEsquemaComercial), tipo_cliente: val(iTipoCliente),
+          calle: val(iCalle), altura: val(iAltura), localidad: val(iLocalidad), provincia: val(iProvincia),
+          cod_postal: val(iCodPostal), barrio: val(iBarrio),
+          telefono: val(iTelefono), mail: val(iMail),
+          transportista: val(iTransportista), plazo_entrega: val(iPlazoEntrega),
+          motivo: val(iMotivo), fecha_alta: val(iFechaAlta), observaciones: val(iObservaciones),
+          estado: val(iEstadoCliente),
+          personas: []
+        }
       });
     });
+
+    // Hoja "Personas": contactos asociados a cada cliente
+    var wsPersonasName = wbMaestro.SheetNames.find(function(n){ return n.trim().toLowerCase()==='personas'; });
+    console.log('[procesarRaw] hoja Personas encontrada:', wsPersonasName || '(NO encontrada)');
+    if(wsPersonasName){
+      var aoaP = XLSX.utils.sheet_to_json(wbMaestro.Sheets[wsPersonasName], {header:1, raw:true, defval:null});
+      var hp = (aoaP[0]||[]).map(function(x){ return String(x==null?'':x).trim(); });
+      var pCliente = ci(hp,'Cliente'), pTitular = ci(hp,'Titular'), pNombre = ci(hp,'Nombre'),
+          pCargo = ci(hp,'Cargo'), pEmail = ci(hp,'Email'), pTelefono = ci(hp,'Telefono');
+      aoaP.slice(1).forEach(function(row){
+        if(row[pCliente]===null || row[pCliente]==='' || row[pCliente]===undefined) return;
+        var codigo = String(parseInt(row[pCliente])).trim();
+        var entry = maestro.get(codigo);
+        if(!entry) return;
+        entry.ficha.personas.push({
+          titular: row[pTitular]!=null ? String(row[pTitular]).trim() : '',
+          nombre: row[pNombre]!=null ? String(row[pNombre]).trim() : '',
+          cargo: row[pCargo]!=null ? String(row[pCargo]).trim() : '',
+          email: row[pEmail]!=null ? String(row[pEmail]).trim() : '',
+          telefono: row[pTelefono]!=null ? String(row[pTelefono]).trim() : ''
+        });
+      });
+    }
+    window._fichaMapOut = maestro;
 
     var r = await smartReadTabular(fReparto);
     var rh = r.header;
@@ -624,9 +724,12 @@ async function procesarRaw(){
     });
 
     window._rawDataOut = newRows;
+    var conFicha = 0;
+    maestro.forEach(function(v){ if(v.ficha && (v.ficha.razon_social || v.ficha.cuit)) conFicha++; });
     showStatus('status-raw', 'ok',
       '✓ Listo: '+newRows.length+' filas generadas.\n'+
       '• Clientes con visita: '+stats.actualizados+'\n'+
+      '• Clientes del maestro con datos de Ficha (Razón Social/CUIT): '+conFicha+' de '+maestro.size+'\n'+
       (stats.zonaNoReconocida?'• Zona no reconocida (omitidos): '+stats.zonaNoReconocida+'\n':'')+
       (stats.sinDatos?'• Sin datos suficientes en el maestro (omitidos): '+stats.sinDatos+'\n':'')+
       (stats.vendedorDesconocido?'• Vendedor no reconocido (omitidos): '+stats.vendedorDesconocido+'\n':'')+
