@@ -431,6 +431,14 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
       </div>
     </div>
 
+    <div onclick="bajaAbrir()" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
+      <span style="font-size:22px">🚫</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#202124">Baja de Cliente</div>
+        <div style="font-size:11px;color:#80868b">Solicitar dar de baja un cliente</div>
+      </div>
+    </div>
+
     <div onclick="oficinaProximamente('Alta Reclamo Cliente')" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer;opacity:.6">
       <span style="font-size:22px">⚠️</span>
       <div>
@@ -692,6 +700,117 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
   </div>
 </div>
 
+<!-- Baja de Cliente -->
+<div class="panel" id="panel-baja-cliente" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
+  <div style="background:#ea4335;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+    <span onclick="bajaVolver()" style="color:#fff;font-size:20px;cursor:pointer">←</span>
+    <div style="color:#fff;font-weight:800;font-size:14px">🚫 Baja de Cliente</div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px">
+
+    <!-- Paso 1: buscar cliente -->
+    <div id="baja-paso-buscar">
+      <label class="alta-lbl">Buscar cliente por código o nombre</label>
+      <input type="text" id="baja-buscar" class="alta-input" oninput="bajaBuscar()" placeholder="Ej: 15449 o Kiosco Don José">
+      <div id="baja-resultados" style="margin-top:10px"></div>
+    </div>
+
+    <!-- Paso 2: formulario -->
+    <div id="baja-paso-form" style="display:none">
+      <div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-bottom:14px">
+        <div style="font-size:13px;font-weight:700;color:#202124" id="baja-cliente-nombre"></div>
+        <div style="font-size:11px;color:#80868b" id="baja-cliente-id"></div>
+      </div>
+
+      <label class="alta-lbl">Motivo de la baja *</label>
+      <select id="baja-motivo" class="alta-input" onchange="bajaActualizarCamposMotivo()">
+        <option value="">Elegir...</option>
+        <option>Cambio de Razón Social</option>
+        <option>CUIT Inválido</option>
+        <option>Deuda Incobrable</option>
+        <option>Zona Peligrosa</option>
+        <option>Mudanza</option>
+        <option>Cierre de Negocio</option>
+        <option>Cambio de Rubro</option>
+        <option>Sin Ventas</option>
+        <option>Gestión Judicial</option>
+        <option>Fallecimiento del Titular</option>
+        <option>Incumplimiento Comercial</option>
+        <option>Cambio de Canal de Venta</option>
+        <option>Otro</option>
+      </select>
+      <div id="baja-motivo-otro-box" style="display:none">
+        <label class="alta-lbl">Especificar motivo</label>
+        <input type="text" id="baja-motivo-otro" class="alta-input">
+      </div>
+
+      <label class="alta-lbl">Fecha de baja *</label>
+      <input type="date" id="baja-fecha" class="alta-input">
+
+      <!-- Campos condicionales según el motivo -->
+      <div id="baja-campo-evidencia" style="display:none">
+        <label class="alta-lbl">📷 Foto del local (opcional)</label>
+        <input type="file" id="baja-foto" class="alta-input" accept="image/*" style="border-style:dashed;background:#f8f9fa">
+      </div>
+      <div id="baja-campo-mudanza" style="display:none">
+        <label class="alta-lbl">Nueva dirección (si se conoce)</label>
+        <input type="text" id="baja-nueva-direccion" class="alta-input">
+      </div>
+      <div id="baja-campo-razon-social" style="display:none">
+        <label class="alta-lbl">Nuevo CUIT</label>
+        <input type="text" id="baja-nuevo-cuit" class="alta-input">
+        <label class="alta-lbl">Nueva Razón Social</label>
+        <input type="text" id="baja-nueva-razon-social" class="alta-input">
+      </div>
+      <div id="baja-campo-rubro" style="display:none">
+        <label class="alta-lbl">Rubro actual</label>
+        <input type="text" id="baja-rubro-actual" class="alta-input">
+      </div>
+      <div id="baja-campo-fallecimiento" style="display:none">
+        <label class="alta-lbl">¿Continúa abierto el comercio?</label>
+        <select id="baja-continua-abierto" class="alta-input">
+          <option value="">Elegir...</option>
+          <option>Sí</option>
+          <option>No</option>
+        </select>
+      </div>
+      <div id="baja-campo-canal" style="display:none">
+        <label class="alta-lbl">¿Quién atiende actualmente?</label>
+        <select id="baja-quien-atiende" class="alta-input">
+          <option value="">Elegir...</option>
+          <option>Otro distribuidor</option>
+          <option>Venta directa fabricante</option>
+          <option>Mayorista</option>
+          <option>Otro</option>
+        </select>
+      </div>
+      <div id="baja-campo-deuda" style="display:none">
+        <label class="alta-lbl">Monto adeudado (opcional)</label>
+        <input type="number" id="baja-monto-adeudado" class="alta-input">
+        <label class="alta-lbl">Días de mora (opcional)</label>
+        <input type="number" id="baja-dias-mora" class="alta-input">
+      </div>
+
+      <label class="alta-lbl">¿Existe posibilidad de recuperar este cliente? *</label>
+      <select id="baja-posibilidad-recuperar" class="alta-input" onchange="bajaTogglePosibilidad()">
+        <option value="">Elegir...</option>
+        <option>Sí</option>
+        <option>No</option>
+        <option>No sabe</option>
+      </select>
+      <div id="baja-como-recuperar-box" style="display:none">
+        <label class="alta-lbl">¿Qué debería ocurrir para recuperarlo?</label>
+        <textarea id="baja-como-recuperar" class="alta-input" rows="2" style="resize:vertical"></textarea>
+      </div>
+
+      <div id="baja-error" style="display:none;background:#fce8e6;color:#c5221f;border-radius:8px;padding:10px 12px;font-size:12px;margin-top:12px;white-space:pre-line"></div>
+      <button id="baja-btn-enviar" onclick="bajaEnviar()" style="width:100%;margin-top:14px;background:#ea4335;color:#fff;border:none;border-radius:8px;padding:12px;font-weight:700;font-size:13px;cursor:pointer">Enviar Baja</button>
+      <button onclick="bajaVolverBuscar()" style="width:100%;margin-top:8px;padding:10px;border:1px solid #dadce0;background:#fff;color:#5f6368;border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer">‹ Cambiar cliente</button>
+    </div>
+
+  </div>
+</div>
+
 <!-- Catálogo de Lanzamientos (vendedor) -->
 <div class="panel" id="panel-catalogo-lanzamientos" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
   <div style="background:#188038;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0">
@@ -798,6 +917,22 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
       <div style="font-size:12px;color:#5f6368" id="modcli-popup-resuelto-por"></div>
     </div>
     <button onclick="modcliPopupCerrar()" style="width:100%;padding:13px;border:none;border-top:1px solid #f1f3f4;background:#fff;color:#5f6368;font-weight:700;font-size:12.5px;cursor:pointer">Entendido</button>
+  </div>
+</div>
+
+<!-- Popup de aviso: una baja de cliente que cargó el vendedor fue resuelta -->
+<div id="baja-popup" style="display:none;position:fixed;inset:0;background:#0007;z-index:4200;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:14px;overflow:hidden;max-width:380px;width:100%">
+    <div id="baja-popup-header" style="padding:16px;color:#fff">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;opacity:.85" id="baja-popup-estado-txt"></div>
+      <div style="font-size:15px;font-weight:800;margin-top:2px">Baja de cliente</div>
+    </div>
+    <div style="padding:16px">
+      <div style="font-size:13px;font-weight:700;color:#202124;margin-bottom:2px" id="baja-popup-cliente"></div>
+      <div style="font-size:11px;color:#9aa0a6;margin-bottom:10px" id="baja-popup-motivo"></div>
+      <div style="font-size:12px;color:#5f6368" id="baja-popup-resuelto-por"></div>
+    </div>
+    <button onclick="bajaPopupCerrar()" style="width:100%;padding:13px;border:none;border-top:1px solid #f1f3f4;background:#fff;color:#5f6368;font-weight:700;font-size:12.5px;cursor:pointer">Entendido</button>
   </div>
 </div>
 
@@ -1148,6 +1283,7 @@ function initAppForVendor(){
   initHdrCal();
   lanzChequearPopup();
   modcliChequearPopup();
+  bajaChequearPopup();
 }
 
 // ── UTILS ──
@@ -2272,6 +2408,262 @@ async function modcliPopupCerrar(){
   }
   // Chequeamos de nuevo por si había más de una modificación resuelta sin ver
   modcliChequearPopup();
+}
+
+// ── VENDEDOR: Baja de Cliente ──
+var bajaClienteSel = null;
+const BAJA_CAMPO_LABELS = {
+  motivo_otro:'Motivo (otro)', nueva_direccion:'Nueva dirección', nuevo_cuit:'Nuevo CUIT',
+  nueva_razon_social:'Nueva Razón Social', rubro_actual:'Rubro actual',
+  continua_abierto:'¿Continúa abierto?', quien_atiende:'¿Quién atiende ahora?',
+  monto_adeudado:'Monto adeudado', dias_mora:'Días de mora',
+  posibilidad_recuperar:'¿Se puede recuperar?', como_recuperar:'Cómo recuperarlo'
+};
+
+function bajaAbrir(){
+  switchTab('baja-cliente');
+}
+
+function bajaBuscar(){
+  var q = (document.getElementById('baja-buscar').value||'').trim().toLowerCase();
+  var el = document.getElementById('baja-resultados');
+  if(!q){ el.innerHTML=''; return; }
+  var vistos = new Set();
+  var resultados = [];
+  RAW_DATA.forEach(function(r){
+    if(r.vend!==currentVendor) return;
+    if(vistos.has(r.id)) return;
+    var enId = String(r.id).toLowerCase().indexOf(q)!==-1;
+    var enNombre = (r.n||'').toLowerCase().indexOf(q)!==-1;
+    if(enId || enNombre){ vistos.add(r.id); resultados.push(r); }
+  });
+  if(!resultados.length){ el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12px;padding:10px">Sin resultados.</div>'; return; }
+  el.innerHTML = resultados.slice(0,20).map(function(r){
+    return '<div onclick="bajaSeleccionarCliente(\''+String(r.id).replace(/'/g,"\\'")+'\')" style="background:#fff;border:1px solid #e8eaed;border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer">'
+      +'<div style="font-size:13px;font-weight:700;color:#202124">'+(r.n||'')+'</div>'
+      +'<div style="font-size:11px;color:#80868b">ID '+r.id+' · '+(r.canal||'')+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function bajaSeleccionarCliente(id){
+  var r = RAW_DATA.find(function(x){ return x.vend===currentVendor && String(x.id)===String(id); });
+  if(!r) return;
+  bajaClienteSel = r;
+  document.getElementById('baja-cliente-nombre').textContent = r.n||'';
+  document.getElementById('baja-cliente-id').textContent = 'ID '+r.id+' · '+(r.canal||'')+' · '+(r.tier||'');
+  document.getElementById('baja-fecha').value = new Date().toISOString().slice(0,10);
+  document.getElementById('baja-paso-buscar').style.display='none';
+  document.getElementById('baja-paso-form').style.display='block';
+}
+
+function bajaVolverBuscar(){
+  document.getElementById('baja-paso-form').style.display='none';
+  document.getElementById('baja-paso-buscar').style.display='block';
+  bajaClienteSel = null;
+}
+
+function bajaVolver(){
+  bajaClienteSel = null;
+  document.getElementById('baja-buscar').value='';
+  document.getElementById('baja-resultados').innerHTML='';
+  document.getElementById('baja-motivo').value='';
+  document.getElementById('baja-posibilidad-recuperar').value='';
+  bajaActualizarCamposMotivo();
+  bajaTogglePosibilidad();
+  document.getElementById('baja-paso-form').style.display='none';
+  document.getElementById('baja-paso-buscar').style.display='block';
+  switchTab('oficina');
+}
+
+function bajaActualizarCamposMotivo(){
+  var motivo = document.getElementById('baja-motivo').value;
+  document.getElementById('baja-motivo-otro-box').style.display = motivo==='Otro' ? 'block' : 'none';
+  var conEvidencia = ['Cierre de Negocio','Mudanza','Cambio de Rubro'];
+  document.getElementById('baja-campo-evidencia').style.display = conEvidencia.indexOf(motivo)!==-1 ? 'block' : 'none';
+  document.getElementById('baja-campo-mudanza').style.display = motivo==='Mudanza' ? 'block' : 'none';
+  document.getElementById('baja-campo-razon-social').style.display = motivo==='Cambio de Razón Social' ? 'block' : 'none';
+  document.getElementById('baja-campo-rubro').style.display = motivo==='Cambio de Rubro' ? 'block' : 'none';
+  document.getElementById('baja-campo-fallecimiento').style.display = motivo==='Fallecimiento del Titular' ? 'block' : 'none';
+  document.getElementById('baja-campo-canal').style.display = motivo==='Cambio de Canal de Venta' ? 'block' : 'none';
+  document.getElementById('baja-campo-deuda').style.display = motivo==='Deuda Incobrable' ? 'block' : 'none';
+}
+
+function bajaTogglePosibilidad(){
+  document.getElementById('baja-como-recuperar-box').style.display = document.getElementById('baja-posibilidad-recuperar').value==='Sí' ? 'block' : 'none';
+}
+
+function bajaBuildEmailHtml(data){
+  function fila(label, valor){
+    return '<tr><td style="padding:4px 10px 4px 0;color:#5f6368;font-size:12.5px;white-space:nowrap;vertical-align:top"><b>'+label+'</b></td>'
+      +'<td style="padding:4px 0;color:#202124;font-size:12.5px">'+(valor!=null && valor!=='' ? valor : '—')+'</td></tr>';
+  }
+  var camposExtra = Object.entries(data.campos||{}).filter(function(e){ return e[1]!=null && e[1]!==''; })
+    .map(function(e){ return fila(BAJA_CAMPO_LABELS[e[0]]||e[0], e[1]); }).join('');
+  return `
+    <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#ea4335;color:#fff;padding:16px 20px;border-radius:10px 10px 0 0">
+        <div style="font-size:16px;font-weight:700">🚫 Baja de cliente pendiente</div>
+        <div style="font-size:12.5px;opacity:.85;margin-top:2px">MiHUB · Ladiar S.A.</div>
+      </div>
+      <div style="border:1px solid #e8eaed;border-top:none;border-radius:0 0 10px 10px;padding:18px 20px">
+        <div style="font-size:15px;font-weight:700;color:#2c3e50;margin-bottom:2px">${data.cliente_nombre||''}</div>
+        <div style="font-size:12.5px;color:#9aa0a6;margin-bottom:14px">ID ${data.cliente_id||''} · ${data.motivo||''}${data.campos&&data.campos.motivo_otro?(' — '+data.campos.motivo_otro):''}</div>
+        <table style="border-collapse:collapse;width:100%">
+          ${fila('Vendedor', (data.vendedor_nombre||'')+' ('+(data.vendedor_code||'')+')')}
+          ${fila('Zona', data.zona)}
+          ${fila('Fecha de baja', data.fecha_baja)}
+          ${camposExtra}
+        </table>
+        <div style="margin-top:18px;padding-top:14px;border-top:1px solid #f1f3f4;font-size:12px;color:#9aa0a6">
+          Entrá a MiHUB (usuario Admin, pestaña ABM CLIENTES) para revisarla.
+        </div>
+      </div>
+    </div>`;
+}
+
+async function bajaEnviar(){
+  const errEl = document.getElementById('baja-error');
+  errEl.style.display='none';
+  const r = bajaClienteSel;
+  if(!r) return;
+
+  const val = (id)=>{ const el=document.getElementById(id); return el ? (el.value||'').trim() : ''; };
+
+  const motivo = val('baja-motivo');
+  const fechaBaja = val('baja-fecha');
+  const posibilidadRecuperar = val('baja-posibilidad-recuperar');
+
+  const faltantes = [];
+  if(!motivo) faltantes.push('Motivo de la baja');
+  if(!fechaBaja) faltantes.push('Fecha de baja');
+  if(!posibilidadRecuperar) faltantes.push('¿Existe posibilidad de recuperar este cliente?');
+  if(motivo==='Otro' && !val('baja-motivo-otro')) faltantes.push('Especificar motivo (elegiste "Otro")');
+  if(posibilidadRecuperar==='Sí' && !val('baja-como-recuperar')) faltantes.push('¿Qué debería ocurrir para recuperarlo?');
+
+  if(faltantes.length){
+    errEl.style.display='block';
+    errEl.textContent = 'Faltan completar estos campos:\n• '+faltantes.join('\n• ');
+    return;
+  }
+
+  const btn = document.getElementById('baja-btn-enviar');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+
+  try{
+    const { db, storage, ref, uploadBytes, collection, addDoc, serverTimestamp } = window.fb;
+
+    const archivo = document.getElementById('baja-foto').files[0];
+    let evidenciaPath = '';
+    if(archivo){
+      evidenciaPath = 'bajas_evidencia/'+Date.now()+'_'+getVendorCode()+'_'+archivo.name;
+      await uploadBytes(ref(storage, evidenciaPath), archivo);
+    }
+
+    const campos = {
+      motivo_otro: motivo==='Otro' ? val('baja-motivo-otro') : '',
+      nueva_direccion: val('baja-nueva-direccion'),
+      nuevo_cuit: val('baja-nuevo-cuit'),
+      nueva_razon_social: val('baja-nueva-razon-social'),
+      rubro_actual: val('baja-rubro-actual'),
+      continua_abierto: val('baja-continua-abierto'),
+      quien_atiende: val('baja-quien-atiende'),
+      monto_adeudado: val('baja-monto-adeudado'),
+      dias_mora: val('baja-dias-mora'),
+      posibilidad_recuperar: posibilidadRecuperar,
+      como_recuperar: posibilidadRecuperar==='Sí' ? val('baja-como-recuperar') : ''
+    };
+
+    const data = {
+      cliente_id: r.id, cliente_nombre: r.n,
+      motivo: motivo, fecha_baja: fechaBaja, evidencia_foto_path: evidenciaPath,
+      campos,
+      vendedor_code: getVendorCode(), vendedor_nombre: currentVendor, zona: r.zona,
+      estado: 'pendiente', fecha_creacion: serverTimestamp()
+    };
+    await addDoc(collection(db,'bajas_pendientes'), data);
+
+    try{
+      await addDoc(collection(db,'mail'), {
+        to: ALTAS_NOTIFY_EMAILS,
+        message: {
+          subject: '🚫 Baja de cliente pendiente: '+(r.n||r.id),
+          html: bajaBuildEmailHtml(data)
+        }
+      });
+    }catch(mailErr){
+      console.error('[bajaEnviar] no se pudo encolar el mail de aviso', mailErr);
+    }
+
+    alert('✅ Baja enviada correctamente. El administrativo la va a revisar.');
+    bajaVolver();
+  }catch(err){
+    console.error('[bajaEnviar]', err);
+    errEl.style.display='block';
+    errEl.textContent = 'Error al enviar: '+(err.message||err);
+  }finally{
+    btn.disabled=false; btn.textContent='Enviar Baja';
+  }
+}
+
+// ── VENDEDOR: Popup de aviso cuando una baja propia fue resuelta ──
+var bajaPopupActualId = null;
+
+async function bajaChequearPopup(){
+  try{
+    const { db, collection, getDocs, query, where, doc, getDoc } = window.fb;
+    const code = getVendorCode();
+    const q = query(collection(db,'bajas_pendientes'), where('vendedor_code','==',code));
+    const snap = await getDocs(q);
+
+    const resueltas = [];
+    snap.forEach(function(d){
+      const data = d.data();
+      if(data.estado==='aprobado' || data.estado==='rechazado') resueltas.push(Object.assign({id:d.id}, data));
+    });
+    if(!resueltas.length) return;
+
+    resueltas.sort(function(a,b){
+      const ta = a.fecha_resolucion && a.fecha_resolucion.toMillis ? a.fecha_resolucion.toMillis() : 0;
+      const tb = b.fecha_resolucion && b.fecha_resolucion.toMillis ? b.fecha_resolucion.toMillis() : 0;
+      return tb-ta;
+    });
+
+    for(const r of resueltas){
+      const vistaSnap = await getDoc(doc(db,'bajas_vistas',r.id));
+      if(!vistaSnap.exists()){
+        bajaMostrarPopupResuelta(r);
+        return;
+      }
+    }
+  }catch(err){
+    console.error('[bajaChequearPopup]', err);
+  }
+}
+
+function bajaMostrarPopupResuelta(r){
+  bajaPopupActualId = r.id;
+  const aprobado = r.estado==='aprobado';
+  document.getElementById('baja-popup-header').style.background = aprobado ? '#188038' : '#ea4335';
+  document.getElementById('baja-popup-estado-txt').textContent = aprobado ? '✅ Aprobada' : '❌ Rechazada';
+  document.getElementById('baja-popup-cliente').textContent = r.cliente_nombre || '';
+  document.getElementById('baja-popup-motivo').textContent = 'ID '+(r.cliente_id||'')+' · '+(r.motivo||'');
+  document.getElementById('baja-popup-resuelto-por').textContent = 'Revisado por '+(r.resuelto_por||'administración')+(r.observacion_aprobador?('. Observación: '+r.observacion_aprobador):'.');
+  document.getElementById('baja-popup').style.display = 'flex';
+}
+
+async function bajaPopupCerrar(){
+  document.getElementById('baja-popup').style.display = 'none';
+  const id = bajaPopupActualId;
+  bajaPopupActualId = null;
+  if(!id) return;
+  try{
+    const { db, doc, setDoc } = window.fb;
+    await setDoc(doc(db,'bajas_vistas',id), { vista_en: new Date().toISOString() });
+  }catch(err){
+    console.error('[bajaPopupCerrar]', err);
+  }
+  bajaChequearPopup();
 }
 
 // ── VENDEDOR: Buscador y Ficha de Cliente (pestaña Clientes) ──
@@ -4087,17 +4479,19 @@ async function adminCargarAltas(){
   el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px 10px">Cargando...</div>';
 
   try{
-    // Traemos las dos colecciones (Altas y Modificaciones) y las unificamos en una
-    // sola lista para poder filtrarlas juntas por Tipo y por Estado.
+    // Traemos las tres colecciones (Altas, Modificaciones, Bajas) y las unificamos
+    // en una sola lista para poder filtrarlas juntas por Tipo y por Estado.
     const { db, collection, getDocs, query, orderBy } = window.fb;
-    const [snapAltas, snapMods] = await Promise.all([
+    const [snapAltas, snapMods, snapBajas] = await Promise.all([
       getDocs(query(collection(db,'altas_pendientes'), orderBy('fecha_creacion','desc'))),
-      getDocs(query(collection(db,'modificaciones_pendientes'), orderBy('fecha_creacion','desc')))
+      getDocs(query(collection(db,'modificaciones_pendientes'), orderBy('fecha_creacion','desc'))),
+      getDocs(query(collection(db,'bajas_pendientes'), orderBy('fecha_creacion','desc')))
     ]);
 
     adminAltasCache = [];
     snapAltas.forEach(docSnap=>{ adminAltasCache.push(Object.assign({id:docSnap.id, _tipo:'alta'}, docSnap.data())); });
     snapMods.forEach(docSnap=>{ adminAltasCache.push(Object.assign({id:docSnap.id, _tipo:'modificacion'}, docSnap.data())); });
+    snapBajas.forEach(docSnap=>{ adminAltasCache.push(Object.assign({id:docSnap.id, _tipo:'baja'}, docSnap.data())); });
 
     adminAltasCache.sort(function(a,b){
       const ta = a.fecha_creacion && a.fecha_creacion.toMillis ? a.fecha_creacion.toMillis() : 0;
@@ -4117,12 +4511,13 @@ async function adminCargarAltas(){
 function adminRenderAbmTipoFiltros(){
   const el = document.getElementById('admin-abm-tipo-filtros');
   if(!el) return;
-  const counts = {alta:0, modificacion:0};
+  const counts = {alta:0, modificacion:0, baja:0};
   adminAltasCache.forEach(a=>{ if(counts[a._tipo]!==undefined) counts[a._tipo]++; });
   const opciones = [
     {key:'todos', label:'Todos', count:adminAltasCache.length},
     {key:'alta', label:'Altas', count:counts.alta},
-    {key:'modificacion', label:'Modificaciones', count:counts.modificacion}
+    {key:'modificacion', label:'Modificaciones', count:counts.modificacion},
+    {key:'baja', label:'Bajas', count:counts.baja}
   ];
   el.innerHTML = opciones.map(function(o){
     const activo = adminAbmTipoFiltro===o.key;
@@ -4141,7 +4536,7 @@ function adminRenderAltasFiltros(){
   const el = document.getElementById('admin-altas-filtros');
   if(!el) return;
   const base = adminAbmTipoFiltro==='todos' ? adminAltasCache : adminAltasCache.filter(a=>a._tipo===adminAbmTipoFiltro);
-  const counts = {pendiente:0, aprobado:0, rechazado:0};
+  const counts = {pendiente:0, en_revision:0, aprobado:0, rechazado:0};
   base.forEach(a=>{
     const e = a.estado || 'pendiente';
     if(counts[e]===undefined) counts[e]=0;
@@ -4149,6 +4544,7 @@ function adminRenderAltasFiltros(){
   });
   const opciones = [
     {key:'pendiente', label:'Pendientes', count:counts.pendiente, color:'#f9ab00'},
+    {key:'en_revision', label:'En revisión', count:counts.en_revision, color:'#1a73e8'},
     {key:'aprobado',  label:'Aprobadas',  count:counts.aprobado,  color:'#188038'},
     {key:'rechazado', label:'Rechazadas', count:counts.rechazado, color:'#ea4335'},
     {key:'todas',     label:'Todas',      count:base.length, color:'#2c3e50'}
@@ -4177,12 +4573,14 @@ function adminRenderAltasList(){
     return;
   }
 
-  const badgeColor = {pendiente:'#f9ab00', aprobado:'#188038', rechazado:'#ea4335'};
-  const badgeLabel = {pendiente:'Pendiente', aprobado:'Aprobada', rechazado:'Rechazada'};
+  const badgeColor = {pendiente:'#f9ab00', en_revision:'#1a73e8', aprobado:'#188038', rechazado:'#ea4335'};
+  const badgeLabel = {pendiente:'Pendiente', en_revision:'En revisión', aprobado:'Aprobada', rechazado:'Rechazada'};
 
   let html = '';
   lista.forEach(a=>{
-    html += a._tipo==='alta' ? adminRenderTarjetaAlta(a, badgeColor, badgeLabel) : adminRenderTarjetaModificacion(a, badgeColor, badgeLabel);
+    if(a._tipo==='alta') html += adminRenderTarjetaAlta(a, badgeColor, badgeLabel);
+    else if(a._tipo==='modificacion') html += adminRenderTarjetaModificacion(a, badgeColor, badgeLabel);
+    else html += adminRenderTarjetaBaja(a, badgeColor, badgeLabel);
   });
   el.innerHTML = html;
 }
@@ -4273,20 +4671,70 @@ function adminRenderTarjetaModificacion(a, badgeColor, badgeLabel){
     </div>`;
 }
 
+function adminRenderTarjetaBaja(a, badgeColor, badgeLabel){
+  const estado = a.estado || 'pendiente';
+  const campos = a.campos || {};
+  const filasCampos = Object.entries(campos).filter(e=>e[1]!=null && e[1]!=='')
+    .map(e=>`<div><b>${BAJA_CAMPO_LABELS[e[0]]||e[0]}:</b> ${e[1]}</div>`).join('');
+  return `<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:14px 16px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:9px;font-weight:800;color:#fff;background:#ea4335;border-radius:4px;padding:2px 6px">BAJA</span>
+            <div style="font-size:14px;font-weight:700;color:#2c3e50">${a.cliente_nombre||'(sin nombre)'}</div>
+            <span style="font-size:9.5px;font-weight:700;color:#fff;background:${badgeColor[estado]};border-radius:10px;padding:2px 8px">${badgeLabel[estado]}</span>
+          </div>
+          <div style="font-size:11px;color:#9aa0a6">ID ${a.cliente_id||''} · ${a.motivo||''}</div>
+        </div>
+        <div style="font-size:10px;color:#9aa0a6;text-align:right;white-space:nowrap">${adminFmtFechaAlta(a.fecha_creacion)}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:11.5px;color:#5f6368;margin-bottom:8px">
+        <div><b>Vendedor:</b> ${a.vendedor_nombre||''} (${a.vendedor_code||''})</div>
+        <div><b>Zona:</b> ${a.zona||'—'}</div>
+        <div><b>Fecha de baja:</b> ${a.fecha_baja||'—'}</div>
+        ${filasCampos}
+      </div>
+      ${a.evidencia_foto_path ? `<div style="font-size:10.5px;color:#9aa0a6;margin-bottom:10px">📎 <a href="javascript:void(0)" onclick="adminVerAdjunto('${a.evidencia_foto_path}')" style="color:#1a73e8;text-decoration:underline;cursor:pointer">${a.evidencia_foto_path.split('/').pop()}</a></div>` : ''}
+      ${estado==='aprobado'||estado==='rechazado' ? `<div style="font-size:10px;color:#9aa0a6;margin-bottom:10px">Resuelta por ${a.resuelto_por||'—'} el ${adminFmtFechaAlta(a.fecha_resolucion)}${a.observacion_aprobador?(' · Obs: '+a.observacion_aprobador):''}</div>` : ''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid #f1f3f4;padding-top:10px">
+        ${estado==='pendiente' ? `
+          <button onclick="adminResolverItem('baja','${a.id}','en_revision')" style="font-size:11px;padding:6px 12px;border:1.5px solid #1a73e8;color:#fff;background:#1a73e8;border-radius:6px;cursor:pointer;font-weight:700">👁 Pasar a revisión</button>
+          <button onclick="adminResolverItem('baja','${a.id}','aprobado')" style="font-size:11px;padding:6px 12px;border:1.5px solid #188038;color:#fff;background:#188038;border-radius:6px;cursor:pointer;font-weight:700">✅ Aprobar</button>
+          <button onclick="adminResolverItem('baja','${a.id}','rechazado')" style="font-size:11px;padding:6px 12px;border:1.5px solid #ea4335;color:#fff;background:#ea4335;border-radius:6px;cursor:pointer;font-weight:700">❌ Rechazar</button>
+        ` : estado==='en_revision' ? `
+          <button onclick="adminResolverItem('baja','${a.id}','aprobado')" style="font-size:11px;padding:6px 12px;border:1.5px solid #188038;color:#fff;background:#188038;border-radius:6px;cursor:pointer;font-weight:700">✅ Aprobar</button>
+          <button onclick="adminResolverItem('baja','${a.id}','rechazado')" style="font-size:11px;padding:6px 12px;border:1.5px solid #ea4335;color:#fff;background:#ea4335;border-radius:6px;cursor:pointer;font-weight:700">❌ Rechazar</button>
+          <button onclick="adminResolverItem('baja','${a.id}','pendiente')" style="font-size:11px;padding:6px 12px;border:1px solid #dadce0;color:#5f6368;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">↺ Volver a pendiente</button>
+        ` : `
+          <button onclick="adminResolverItem('baja','${a.id}','pendiente')" style="font-size:11px;padding:6px 12px;border:1px solid #dadce0;color:#5f6368;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">↺ Volver a pendiente</button>
+        `}
+        ${estado==='rechazado' ? `<button onclick="adminEliminarItem('baja','${a.id}')" style="font-size:11px;padding:6px 12px;border:1.5px solid #ea4335;color:#ea4335;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">🗑 Eliminar</button>` : ''}
+      </div>
+    </div>`;
+}
+
 async function adminResolverItem(tipo, id, nuevoEstado){
-  const labels = {aprobado:'aprobar', rechazado:'rechazar', pendiente:'devolver a pendiente'};
-  const desc = tipo==='alta' ? 'esta alta' : 'esta modificación';
+  const labels = {aprobado:'aprobar', rechazado:'rechazar', pendiente:'devolver a pendiente', en_revision:'pasar a en revisión'};
+  const desc = tipo==='alta' ? 'esta alta' : tipo==='modificacion' ? 'esta modificación' : 'esta baja';
   if(!confirm('¿Confirmás '+labels[nuevoEstado]+' '+desc+'?')) return;
+
+  let observacion = null;
+  if(tipo==='baja' && (nuevoEstado==='aprobado' || nuevoEstado==='rechazado')){
+    observacion = prompt('Observación para el vendedor (opcional):') || '';
+  }
+
   try{
     const { db, doc, setDoc, serverTimestamp } = window.fb;
-    const coleccion = tipo==='alta' ? 'altas_pendientes' : 'modificaciones_pendientes';
+    const coleccion = tipo==='alta' ? 'altas_pendientes' : tipo==='modificacion' ? 'modificaciones_pendientes' : 'bajas_pendientes';
     const data = { estado: nuevoEstado };
-    if(nuevoEstado==='pendiente'){
+    if(nuevoEstado==='pendiente' || nuevoEstado==='en_revision'){
       data.resuelto_por = null;
       data.fecha_resolucion = null;
+      if(tipo==='baja') data.observacion_aprobador = null;
     } else {
       data.resuelto_por = currentAdmin || '';
       data.fecha_resolucion = serverTimestamp();
+      if(tipo==='baja') data.observacion_aprobador = observacion;
     }
     await setDoc(doc(db,coleccion,id), data, {merge:true});
     await adminCargarAltas(); // re-trae todo para tener la fecha_resolucion real del servidor
@@ -4296,12 +4744,15 @@ async function adminResolverItem(tipo, id, nuevoEstado){
   }
 }
 
+function adminColeccionPorTipo(tipo){
+  return tipo==='alta' ? 'altas_pendientes' : tipo==='modificacion' ? 'modificaciones_pendientes' : 'bajas_pendientes';
+}
+
 async function adminEliminarItem(tipo, id){
   if(!confirm('¿Eliminar definitivamente este registro rechazado? Esta acción no se puede deshacer.')) return;
   try{
     const { db, doc, deleteDoc } = window.fb;
-    const coleccion = tipo==='alta' ? 'altas_pendientes' : 'modificaciones_pendientes';
-    await deleteDoc(doc(db,coleccion,id));
+    await deleteDoc(doc(db,adminColeccionPorTipo(tipo),id));
     await adminCargarAltas();
   }catch(err){
     console.error('[adminEliminarItem]', err);
@@ -4310,8 +4761,8 @@ async function adminEliminarItem(tipo, id){
 }
 
 async function adminEliminarTodosRechazados(){
-  // Respeta el filtro de Tipo activo (Todos/Altas/Modificaciones), pero apunta
-  // siempre a los rechazados sin importar qué filtro de Estado esté puesto.
+  // Respeta el filtro de Tipo activo (Todos/Altas/Modificaciones/Bajas), pero
+  // apunta siempre a los rechazados sin importar qué filtro de Estado esté puesto.
   const base = adminAbmTipoFiltro==='todos' ? adminAltasCache : adminAltasCache.filter(a=>a._tipo===adminAbmTipoFiltro);
   const rechazados = base.filter(a=>(a.estado||'pendiente')==='rechazado');
 
@@ -4324,8 +4775,7 @@ async function adminEliminarTodosRechazados(){
     for(let i=0;i<rechazados.length;i+=LOTE){
       const batch = writeBatch(db);
       rechazados.slice(i,i+LOTE).forEach(a=>{
-        const coleccion = a._tipo==='alta' ? 'altas_pendientes' : 'modificaciones_pendientes';
-        batch.delete(doc(db,coleccion,a.id));
+        batch.delete(doc(db,adminColeccionPorTipo(a._tipo),a.id));
       });
       await batch.commit();
     }
@@ -4350,7 +4800,8 @@ async function adminExportAltasExcel(){
       'Día visita alta','Frecuencia alta','Orden alta','Vendedor compañero','Día visita compañero',
       'Frecuencia compañero','Orden compañero','Observaciones','Adjunto',
       'Categoría modificada','Detalle modificación',
-      'Resuelto por','Fecha resolución'];
+      'Motivo baja','Fecha baja','Detalle baja','Evidencia baja','Posibilidad recuperar','Cómo recuperar',
+      'Resuelto por','Fecha resolución','Observación aprobador'];
     const aoa = [header];
     lista.forEach(a=>{
       if(a._tipo==='alta'){
@@ -4363,9 +4814,10 @@ async function adminExportAltasExcel(){
           a.companero_nombre||'', a.dia_companero||'', a.frecuencia_companero||'', a.orden_companero!=null?a.orden_companero:'',
           a.observaciones||'', a.documentacion_path ? a.documentacion_path.split('/').pop() : '',
           '', '',
-          a.resuelto_por||'', a.fecha_resolucion ? adminFmtFechaAlta(a.fecha_resolucion) : ''
+          '', '', '', '', '', '',
+          a.resuelto_por||'', a.fecha_resolucion ? adminFmtFechaAlta(a.fecha_resolucion) : '', ''
         ]);
-      } else {
+      } else if(a._tipo==='modificacion'){
         const campos = a.campos || {};
         const detalle = Object.entries(campos).filter(e=>e[1]!=null && e[1]!=='')
           .map(e=>(MODCLI_CAMPO_LABELS[e[0]]||e[0])+': '+e[1]).join(' | ');
@@ -4378,7 +4830,25 @@ async function adminExportAltasExcel(){
           '', '', '', '',
           '', '',
           MODCLI_CATEGORIA_LABELS[a.categoria]||a.categoria||'', detalle,
-          a.resuelto_por||'', a.fecha_resolucion ? adminFmtFechaAlta(a.fecha_resolucion) : ''
+          '', '', '', '', '', '',
+          a.resuelto_por||'', a.fecha_resolucion ? adminFmtFechaAlta(a.fecha_resolucion) : '', ''
+        ]);
+      } else {
+        const campos = a.campos || {};
+        const detalleBaja = Object.entries(campos).filter(e=>e[0]!=='posibilidad_recuperar' && e[0]!=='como_recuperar' && e[1]!=null && e[1]!=='')
+          .map(e=>(BAJA_CAMPO_LABELS[e[0]]||e[0])+': '+e[1]).join(' | ');
+        aoa.push([
+          'Baja', a.estado||'pendiente', adminFmtFechaAlta(a.fecha_creacion), a.vendedor_nombre||'', a.vendedor_code||'',
+          a.zona||'', a.cliente_nombre||'', '', '', '',
+          '', '', '', '', '',
+          '', '', '', '', '',
+          '', '', '', '', '',
+          '', '', '', '',
+          '', '',
+          '', '',
+          a.motivo||'', a.fecha_baja||'', detalleBaja, a.evidencia_foto_path ? a.evidencia_foto_path.split('/').pop() : '',
+          campos.posibilidad_recuperar||'', campos.como_recuperar||'',
+          a.resuelto_por||'', a.fecha_resolucion ? adminFmtFechaAlta(a.fecha_resolucion) : '', a.observacion_aprobador||''
         ]);
       }
     });
