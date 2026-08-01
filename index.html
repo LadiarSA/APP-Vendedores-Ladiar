@@ -127,7 +127,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getAuth, signInWithEmailAndPassword, signOut, getIdTokenResult, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc, writeBatch, getDoc, addDoc, serverTimestamp, query, where, orderBy }
+  import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc, writeBatch, getDoc, addDoc, serverTimestamp, query, where, orderBy, runTransaction, arrayUnion }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   import { getStorage, ref, getBytes, uploadBytes }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
@@ -146,7 +146,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
   const db = getFirestore(app);
   const storage = getStorage(app);
 
-  window.fb = { auth, db, storage, signInWithEmailAndPassword, signOut, getIdTokenResult, collection, getDocs, ref, getBytes, doc, setDoc, deleteDoc, writeBatch, getDoc, addDoc, serverTimestamp, query, where, orderBy, uploadBytes };
+  window.fb = { auth, db, storage, signInWithEmailAndPassword, signOut, getIdTokenResult, collection, getDocs, ref, getBytes, doc, setDoc, deleteDoc, writeBatch, getDoc, addDoc, serverTimestamp, query, where, orderBy, uploadBytes, runTransaction, arrayUnion };
   window.fbReady = true;
 
   // Cada vez que Firebase termina de chequear si hay una sesión guardada (al cargar
@@ -439,11 +439,19 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
       </div>
     </div>
 
-    <div onclick="oficinaProximamente('Alta Reclamo Cliente')" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer;opacity:.6">
+    <div onclick="reclamoAbrir()" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
       <span style="font-size:22px">⚠️</span>
       <div>
         <div style="font-size:13px;font-weight:700;color:#202124">Alta Reclamo Cliente</div>
-        <div style="font-size:11px;color:#80868b">Próximamente</div>
+        <div style="font-size:11px;color:#80868b">Cargar un reclamo de un cliente</div>
+      </div>
+    </div>
+
+    <div onclick="reclamoAbrirLista()" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
+      <span style="font-size:22px">📋</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#202124">Mis Reclamos</div>
+        <div style="font-size:11px;color:#80868b">Ver estado y responder</div>
       </div>
     </div>
 
@@ -811,6 +819,72 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
   </div>
 </div>
 
+<!-- Alta de Reclamo -->
+<div class="panel" id="panel-reclamo-cliente" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
+  <div style="background:#f9ab00;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+    <span onclick="reclamoVolver()" style="color:#fff;font-size:20px;cursor:pointer">←</span>
+    <div style="color:#fff;font-weight:800;font-size:14px">⚠️ Alta de Reclamo</div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px">
+
+    <div id="reclamo-paso-buscar">
+      <label class="alta-lbl">Buscar cliente por código o nombre</label>
+      <input type="text" id="reclamo-buscar" class="alta-input" oninput="reclamoBuscar()" placeholder="Ej: 15449 o Kiosco Don José">
+      <div id="reclamo-resultados" style="margin-top:10px"></div>
+    </div>
+
+    <div id="reclamo-paso-form" style="display:none">
+      <div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-bottom:14px">
+        <div style="font-size:13px;font-weight:700;color:#202124" id="reclamo-cliente-nombre"></div>
+        <div style="font-size:11px;color:#80868b" id="reclamo-cliente-id"></div>
+      </div>
+
+      <label class="alta-lbl">Motivo del reclamo *</label>
+      <select id="reclamo-motivo" class="alta-input">
+        <option value="">Elegir...</option>
+        <option>Mercadería faltante</option>
+        <option>Mercadería sobrante</option>
+        <option>Mercadería corto vencimiento</option>
+        <option>Mercadería no pedida</option>
+        <option>Mercadería mal estado</option>
+        <option>Problema con hora de entrega</option>
+        <option>Problema con día de entrega</option>
+        <option>Inconvenientes con el transportista</option>
+        <option>Inconvenientes con el Vendedor</option>
+        <option>Inconveniente Impositivo</option>
+        <option>Nota de crédito</option>
+        <option>Cancelar pedido</option>
+        <option>Diferencia de Precio</option>
+        <option>Tokin - Error del cliente</option>
+        <option>Error de facturación</option>
+        <option>Error de Conversión</option>
+      </select>
+
+      <label class="alta-lbl">Fotos (opcional, podés elegir varias)</label>
+      <input type="file" id="reclamo-fotos" class="alta-input" accept="image/*" multiple style="border-style:dashed;background:#f8f9fa">
+
+      <label class="alta-lbl">Comentario *</label>
+      <textarea id="reclamo-comentario" class="alta-input" rows="3" style="resize:vertical"></textarea>
+
+      <label class="alta-lbl">Sugerencia / posible solución (opcional)</label>
+      <textarea id="reclamo-sugerencia" class="alta-input" rows="2" style="resize:vertical"></textarea>
+
+      <div id="reclamo-error" style="display:none;background:#fce8e6;color:#c5221f;border-radius:8px;padding:10px 12px;font-size:12px;margin-top:12px;white-space:pre-line"></div>
+      <button id="reclamo-btn-enviar" onclick="reclamoEnviar()" style="width:100%;margin-top:14px;background:#f9ab00;color:#fff;border:none;border-radius:8px;padding:12px;font-weight:700;font-size:13px;cursor:pointer">Enviar Reclamo</button>
+      <button onclick="reclamoVolverBuscar()" style="width:100%;margin-top:8px;padding:10px;border:1px solid #dadce0;background:#fff;color:#5f6368;border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer">‹ Cambiar cliente</button>
+    </div>
+  </div>
+</div>
+
+<!-- Mis Reclamos (lista del vendedor) -->
+<div class="panel" id="panel-mis-reclamos" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
+  <div style="background:#f9ab00;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+    <span onclick="switchTab('oficina')" style="color:#fff;font-size:20px;cursor:pointer">←</span>
+    <div style="color:#fff;font-weight:800;font-size:14px">📋 Mis Reclamos</div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px" id="mis-reclamos-content"></div>
+</div>
+
 <!-- Catálogo de Lanzamientos (vendedor) -->
 <div class="panel" id="panel-catalogo-lanzamientos" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
   <div style="background:#188038;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0">
@@ -933,6 +1007,56 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
       <div style="font-size:12px;color:#5f6368" id="baja-popup-resuelto-por"></div>
     </div>
     <button onclick="bajaPopupCerrar()" style="width:100%;padding:13px;border:none;border-top:1px solid #f1f3f4;background:#fff;color:#5f6368;font-weight:700;font-size:12.5px;cursor:pointer">Entendido</button>
+  </div>
+</div>
+
+<!-- Popup de aviso: nuevo mensaje de administración en un reclamo propio -->
+<div id="reclamo-popup" style="display:none;position:fixed;inset:0;background:#0007;z-index:4200;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:14px;overflow:hidden;max-width:380px;width:100%">
+    <div style="padding:16px;color:#fff;background:#f9ab00">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;opacity:.85">Nuevo mensaje</div>
+      <div style="font-size:15px;font-weight:800;margin-top:2px">Reclamo <span id="reclamo-popup-codigo"></span></div>
+    </div>
+    <div style="padding:16px">
+      <div style="font-size:13px;font-weight:700;color:#202124;margin-bottom:2px" id="reclamo-popup-cliente"></div>
+      <div style="font-size:11px;color:#9aa0a6;margin-bottom:10px" id="reclamo-popup-estado"></div>
+      <div style="font-size:12px;color:#5f6368;background:#f8f9fa;border-radius:8px;padding:10px" id="reclamo-popup-mensaje"></div>
+    </div>
+    <div style="display:flex;border-top:1px solid #f1f3f4">
+      <button onclick="reclamoPopupCerrar()" style="flex:1;padding:13px;border:none;background:#fff;color:#5f6368;font-weight:700;font-size:12.5px;cursor:pointer">Cerrar</button>
+      <button onclick="reclamoPopupVerDetalle()" style="flex:1;padding:13px;border:none;border-left:1px solid #f1f3f4;background:#f9ab00;color:#fff;font-weight:700;font-size:12.5px;cursor:pointer">Ver / Responder</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal compartido: detalle + hilo de un reclamo (vendedor y admin) -->
+<div id="reclamo-hilo-modal" style="display:none;position:fixed;inset:0;background:#0007;z-index:4400;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:14px;overflow:hidden;max-width:440px;width:100%;max-height:90vh;display:flex;flex-direction:column">
+    <div style="background:#f9ab00;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+      <div style="flex:1;color:#fff;font-weight:800;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="reclamo-hilo-codigo"></div>
+      <span onclick="reclamoCerrarHilo()" style="color:#fff;font-size:20px;cursor:pointer;flex-shrink:0">✕</span>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:16px" id="reclamo-hilo-info"></div>
+    <div style="border-top:1px solid #f1f3f4;padding:12px 16px;flex-shrink:0;background:#fafafa">
+      <textarea id="reclamo-hilo-mensaje" class="alta-input" rows="2" placeholder="Escribir un mensaje..." style="resize:vertical;margin-bottom:8px"></textarea>
+      <button onclick="reclamoEnviarMensaje()" style="width:100%;padding:10px;border:none;background:#2c3e50;color:#fff;border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer">Enviar mensaje</button>
+      <div id="reclamo-hilo-admin-controles" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid #e8eaed"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Popup del Admin al entrar: resumen de reclamos pendientes -->
+<div id="admin-reclamos-popup" style="display:none;position:fixed;inset:0;background:#0007;z-index:4500;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:14px;overflow:hidden;max-width:420px;width:100%;max-height:80vh;display:flex;flex-direction:column">
+    <div style="background:#f9ab00;padding:14px 16px;flex-shrink:0">
+      <div style="font-size:15px;font-weight:800;color:#fff">⚠️ Reclamos que necesitan atención</div>
+      <div style="font-size:11.5px;color:#fff;opacity:.9" id="admin-reclamos-popup-resumen"></div>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:12px 16px" id="admin-reclamos-popup-lista"></div>
+    <div style="display:flex;border-top:1px solid #f1f3f4;flex-shrink:0">
+      <button onclick="adminReclamosPopupCerrar()" style="flex:1;padding:13px;border:none;background:#fff;color:#5f6368;font-weight:700;font-size:12.5px;cursor:pointer">Cerrar</button>
+      <button onclick="adminReclamosPopupIrATab()" style="flex:1;padding:13px;border:none;border-left:1px solid #f1f3f4;background:#f9ab00;color:#fff;font-weight:700;font-size:12.5px;cursor:pointer">Ir a Reclamos</button>
+    </div>
   </div>
 </div>
 
@@ -1284,6 +1408,7 @@ function initAppForVendor(){
   lanzChequearPopup();
   modcliChequearPopup();
   bajaChequearPopup();
+  reclamoChequearPopup();
 }
 
 // ── UTILS ──
@@ -2664,6 +2789,506 @@ async function bajaPopupCerrar(){
     console.error('[bajaPopupCerrar]', err);
   }
   bajaChequearPopup();
+}
+
+// ── VENDEDOR: Reclamos ──
+var reclamoClienteSel = null;
+var reclamoHiloActual = null; // {id, ...data} del reclamo abierto en el modal de hilo
+var reclamoHiloEsAdmin = false;
+var reclamoPopupActualId = null;
+
+const RECLAMO_MOTIVO_SECTOR = {
+  'Mercadería faltante':'Logística', 'Mercadería sobrante':'Logística', 'Mercadería corto vencimiento':'Logística',
+  'Mercadería no pedida':'Facturación', 'Mercadería mal estado':'Logística', 'Problema con hora de entrega':'Logística',
+  'Problema con día de entrega':'Logística', 'Inconvenientes con el transportista':'Logística',
+  'Inconvenientes con el Vendedor':'Administración', 'Inconveniente Impositivo':'Administración',
+  'Nota de crédito':'Administración', 'Cancelar pedido':'Administración', 'Diferencia de Precio':'Administración',
+  'Tokin - Error del cliente':'Administración', 'Error de facturación':'Administración', 'Error de Conversión':'Administración'
+};
+const RECLAMO_SECTOR_MAILS = {
+  'Facturación': ['sandra.ascua@ladiar.com.ar'],
+  'Logística': ['yago.guadalupe@ladiar.com.ar','cristian.diaz@ladiar.com.ar'],
+  'Administración': []
+};
+const RECLAMO_ESTADO_LABELS = { pendiente:'Pendiente', en_revision:'En revisión', aprobado:'Aprobada', rechazado:'Rechazada' };
+const RECLAMO_RESOLUCIONES = ['REINTEGRO MERCADERIA','RETIRO MERCADERIA','NOTA DE CREDITO','VISITA SUPERVISOR',
+  'SIN RESOLUCIÓN','RECLAMO NO VALIDO','REINTEGRO DE DINERO','PEDIDO CANCELADO','MERCADERIA EN CONSIGNACION',
+  'RETIRO+CAMBIO','MERCADERÍA EN EL DEPOSITO','MERCADERIA VENCIDA','MUCHO STOCK','RETIRO DE FREEZER',
+  'RETIRO DE MOBILIARIO','OTRO'];
+
+function fechaCorta(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+
+async function reclamoGenerarCodigo(){
+  const { db, doc, runTransaction } = window.fb;
+  const hoy = new Date();
+  const fechaStr = hoy.getFullYear()+String(hoy.getMonth()+1).padStart(2,'0')+String(hoy.getDate()).padStart(2,'0');
+  const contadorRef = doc(db,'contadores','reclamos_'+fechaStr);
+  const nuevoNumero = await runTransaction(db, async (tx)=>{
+    const snap = await tx.get(contadorRef);
+    const actual = snap.exists() ? (snap.data().ultimo||0) : 0;
+    const siguiente = actual+1;
+    tx.set(contadorRef, { ultimo: siguiente }, {merge:true});
+    return siguiente;
+  });
+  return 'REC-'+fechaStr+'-'+String(nuevoNumero).padStart(3,'0');
+}
+
+function reclamoAbrir(){
+  switchTab('reclamo-cliente');
+}
+
+function reclamoBuscar(){
+  var q = (document.getElementById('reclamo-buscar').value||'').trim().toLowerCase();
+  var el = document.getElementById('reclamo-resultados');
+  if(!q){ el.innerHTML=''; return; }
+  var vistos = new Set();
+  var resultados = [];
+  RAW_DATA.forEach(function(r){
+    if(r.vend!==currentVendor) return;
+    if(vistos.has(r.id)) return;
+    var enId = String(r.id).toLowerCase().indexOf(q)!==-1;
+    var enNombre = (r.n||'').toLowerCase().indexOf(q)!==-1;
+    if(enId || enNombre){ vistos.add(r.id); resultados.push(r); }
+  });
+  if(!resultados.length){ el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12px;padding:10px">Sin resultados.</div>'; return; }
+  el.innerHTML = resultados.slice(0,20).map(function(r){
+    return '<div onclick="reclamoSeleccionarCliente(\''+String(r.id).replace(/'/g,"\\'")+'\')" style="background:#fff;border:1px solid #e8eaed;border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer">'
+      +'<div style="font-size:13px;font-weight:700;color:#202124">'+(r.n||'')+'</div>'
+      +'<div style="font-size:11px;color:#80868b">ID '+r.id+' · '+(r.canal||'')+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function reclamoSeleccionarCliente(id){
+  var r = RAW_DATA.find(function(x){ return x.vend===currentVendor && String(x.id)===String(id); });
+  if(!r) return;
+  reclamoClienteSel = r;
+  document.getElementById('reclamo-cliente-nombre').textContent = r.n||'';
+  document.getElementById('reclamo-cliente-id').textContent = 'ID '+r.id+' · '+(r.canal||'')+' · '+(r.tier||'');
+  document.getElementById('reclamo-paso-buscar').style.display='none';
+  document.getElementById('reclamo-paso-form').style.display='block';
+}
+
+function reclamoVolverBuscar(){
+  document.getElementById('reclamo-paso-form').style.display='none';
+  document.getElementById('reclamo-paso-buscar').style.display='block';
+  reclamoClienteSel = null;
+}
+
+function reclamoVolver(){
+  reclamoClienteSel = null;
+  document.getElementById('reclamo-buscar').value='';
+  document.getElementById('reclamo-resultados').innerHTML='';
+  document.getElementById('reclamo-motivo').value='';
+  document.getElementById('reclamo-comentario').value='';
+  document.getElementById('reclamo-sugerencia').value='';
+  document.getElementById('reclamo-fotos').value='';
+  document.getElementById('reclamo-paso-form').style.display='none';
+  document.getElementById('reclamo-paso-buscar').style.display='block';
+  switchTab('oficina');
+}
+
+function reclamoBuildEmailHtml(data){
+  return `
+    <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#f9ab00;color:#fff;padding:16px 20px;border-radius:10px 10px 0 0">
+        <div style="font-size:16px;font-weight:700">⚠️ Nuevo reclamo: ${data.codigo_reclamo}</div>
+        <div style="font-size:12.5px;opacity:.85;margin-top:2px">MiHUB · Ladiar S.A.</div>
+      </div>
+      <div style="border:1px solid #e8eaed;border-top:none;border-radius:0 0 10px 10px;padding:18px 20px">
+        <div style="font-size:15px;font-weight:700;color:#2c3e50;margin-bottom:2px">${data.cliente_nombre||''}</div>
+        <div style="font-size:12.5px;color:#9aa0a6;margin-bottom:14px">ID ${data.cliente_id||''} · ${data.motivo||''} · Sector: ${data.sector||''}</div>
+        <table style="border-collapse:collapse;width:100%">
+          <tr><td style="padding:4px 10px 4px 0;color:#5f6368;font-size:12.5px;white-space:nowrap;vertical-align:top"><b>Vendedor</b></td><td style="padding:4px 0;color:#202124;font-size:12.5px">${data.vendedor_nombre||''} (${data.vendedor_code||''})</td></tr>
+          <tr><td style="padding:4px 10px 4px 0;color:#5f6368;font-size:12.5px;white-space:nowrap;vertical-align:top"><b>Zona</b></td><td style="padding:4px 0;color:#202124;font-size:12.5px">${data.zona||'—'}</td></tr>
+          <tr><td style="padding:4px 10px 4px 0;color:#5f6368;font-size:12.5px;white-space:nowrap;vertical-align:top"><b>Comentario</b></td><td style="padding:4px 0;color:#202124;font-size:12.5px">${data.comentario||''}</td></tr>
+          ${data.sugerencia?('<tr><td style="padding:4px 10px 4px 0;color:#5f6368;font-size:12.5px;white-space:nowrap;vertical-align:top"><b>Sugerencia</b></td><td style="padding:4px 0;color:#202124;font-size:12.5px">'+data.sugerencia+'</td></tr>'):''}
+          <tr><td style="padding:4px 10px 4px 0;color:#5f6368;font-size:12.5px;white-space:nowrap;vertical-align:top"><b>Fotos</b></td><td style="padding:4px 0;color:#202124;font-size:12.5px">${(data.fotos||[]).length} adjunta(s)</td></tr>
+        </table>
+        <div style="margin-top:18px;padding-top:14px;border-top:1px solid #f1f3f4;font-size:12px;color:#9aa0a6">
+          Entrá a MiHUB (usuario Admin, pestaña RECLAMOS) para gestionarlo.
+        </div>
+      </div>
+    </div>`;
+}
+
+async function reclamoEnviar(){
+  const errEl = document.getElementById('reclamo-error');
+  errEl.style.display='none';
+  const r = reclamoClienteSel;
+  if(!r) return;
+
+  const val = (id)=>{ const el=document.getElementById(id); return el ? (el.value||'').trim() : ''; };
+  const motivo = val('reclamo-motivo');
+  const comentario = val('reclamo-comentario');
+
+  const faltantes = [];
+  if(!motivo) faltantes.push('Motivo del reclamo');
+  if(!comentario) faltantes.push('Comentario');
+  if(faltantes.length){
+    errEl.style.display='block';
+    errEl.textContent = 'Faltan completar estos campos:\n• '+faltantes.join('\n• ');
+    return;
+  }
+
+  const btn = document.getElementById('reclamo-btn-enviar');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+
+  try{
+    const { db, storage, ref, uploadBytes, collection, addDoc, serverTimestamp } = window.fb;
+
+    const archivos = Array.from(document.getElementById('reclamo-fotos').files||[]);
+    const fotos = [];
+    for(const archivo of archivos){
+      const path = 'reclamos_fotos/'+Date.now()+'_'+getVendorCode()+'_'+archivo.name;
+      await uploadBytes(ref(storage, path), archivo);
+      fotos.push(path);
+    }
+
+    const codigo = await reclamoGenerarCodigo();
+    const sector = RECLAMO_MOTIVO_SECTOR[motivo] || 'Administración';
+
+    const data = {
+      codigo_reclamo: codigo,
+      cliente_id: r.id, cliente_nombre: r.n,
+      motivo, sector, fotos,
+      comentario, sugerencia: val('reclamo-sugerencia'),
+      vendedor_code: getVendorCode(), vendedor_nombre: currentVendor, zona: r.zona,
+      estado: 'pendiente', hilo: [],
+      fecha_creacion: serverTimestamp()
+    };
+    await addDoc(collection(db,'reclamos_pendientes'), data);
+
+    try{
+      const destinatarios = ALTAS_NOTIFY_EMAILS.concat(RECLAMO_SECTOR_MAILS[sector]||[]);
+      await addDoc(collection(db,'mail'), {
+        to: destinatarios,
+        message: { subject: '⚠️ Nuevo reclamo '+codigo+': '+(r.n||r.id), html: reclamoBuildEmailHtml(data) }
+      });
+    }catch(mailErr){
+      console.error('[reclamoEnviar] no se pudo encolar el mail de aviso', mailErr);
+    }
+
+    alert('✅ Reclamo '+codigo+' enviado correctamente.');
+    reclamoVolver();
+  }catch(err){
+    console.error('[reclamoEnviar]', err);
+    errEl.style.display='block';
+    errEl.textContent = 'Error al enviar: '+(err.message||err);
+  }finally{
+    btn.disabled=false; btn.textContent='Enviar Reclamo';
+  }
+}
+
+async function reclamoAbrirLista(){
+  switchTab('mis-reclamos');
+  await reclamoCargarMisReclamos();
+}
+
+async function reclamoCargarMisReclamos(){
+  const el = document.getElementById('mis-reclamos-content');
+  if(!el) return;
+  el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px">Cargando...</div>';
+  try{
+    const { db, collection, getDocs, query, where } = window.fb;
+    const code = getVendorCode();
+    const q = query(collection(db,'reclamos_pendientes'), where('vendedor_code','==',code));
+    const snap = await getDocs(q);
+    const lista = [];
+    snap.forEach(function(d){ lista.push(Object.assign({id:d.id}, d.data())); });
+    lista.sort(function(a,b){
+      const ta = a.fecha_creacion && a.fecha_creacion.toMillis ? a.fecha_creacion.toMillis() : 0;
+      const tb = b.fecha_creacion && b.fecha_creacion.toMillis ? b.fecha_creacion.toMillis() : 0;
+      return tb-ta;
+    });
+    if(!lista.length){
+      el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px">Todavía no cargaste ningún reclamo.</div>';
+      return;
+    }
+    const badgeColor = {pendiente:'#f9ab00', en_revision:'#1a73e8', aprobado:'#188038', rechazado:'#ea4335'};
+    el.innerHTML = lista.map(function(r){
+      const estado = r.estado||'pendiente';
+      return '<div onclick="reclamoAbrirHilo(\''+r.id+'\', false)" style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-bottom:10px;cursor:pointer">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+        +'<div style="font-size:12.5px;font-weight:700;color:#202124">'+(r.codigo_reclamo||'')+' · '+(r.cliente_nombre||'')+'</div>'
+        +'<span style="font-size:9px;font-weight:700;color:#fff;background:'+badgeColor[estado]+';border-radius:10px;padding:2px 8px;white-space:nowrap">'+RECLAMO_ESTADO_LABELS[estado]+'</span>'
+        +'</div>'
+        +'<div style="font-size:11px;color:#9aa0a6;margin-top:3px">'+(r.motivo||'')+'</div>'
+        +'</div>';
+    }).join('');
+  }catch(err){
+    console.error('[reclamoCargarMisReclamos]', err);
+    el.innerHTML = '<div style="text-align:center;color:#ea4335;font-size:12.5px;padding:16px">Error: '+(err.message||err)+'</div>';
+  }
+}
+
+async function reclamoAbrirHilo(id, esAdmin){
+  reclamoHiloEsAdmin = !!esAdmin;
+  try{
+    const { db, doc, getDoc } = window.fb;
+    const snap = await getDoc(doc(db,'reclamos_pendientes',id));
+    if(!snap.exists()){ alert('No se encontró el reclamo.'); return; }
+    reclamoHiloActual = Object.assign({id:snap.id}, snap.data());
+  }catch(err){
+    console.error('[reclamoAbrirHilo]', err);
+    alert('Error al cargar el reclamo: '+(err.message||err));
+    return;
+  }
+  reclamoRenderHilo();
+  document.getElementById('reclamo-hilo-mensaje').value='';
+  document.getElementById('reclamo-hilo-modal').style.display='flex';
+
+  if(!esAdmin){
+    try{
+      const { db, doc, setDoc } = window.fb;
+      await setDoc(doc(db,'reclamos_vistas',id), { mensajes_vistos: (reclamoHiloActual.hilo||[]).length }, {merge:true});
+    }catch(e){ console.error('[reclamoAbrirHilo] marcar visto', e); }
+  }
+}
+
+function reclamoRenderHilo(){
+  const r = reclamoHiloActual;
+  if(!r) return;
+  document.getElementById('reclamo-hilo-codigo').textContent = r.codigo_reclamo || '';
+
+  const badgeColor = {pendiente:'#f9ab00', en_revision:'#1a73e8', aprobado:'#188038', rechazado:'#ea4335'};
+  const estado = r.estado || 'pendiente';
+
+  let html = '';
+  html += '<div style="margin-bottom:12px">';
+  html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">';
+  html += '<div style="font-size:14px;font-weight:700;color:#202124">'+(r.cliente_nombre||'')+'</div>';
+  html += '<span style="font-size:9.5px;font-weight:700;color:#fff;background:'+badgeColor[estado]+';border-radius:10px;padding:2px 8px">'+RECLAMO_ESTADO_LABELS[estado]+'</span>';
+  html += '</div>';
+  html += '<div style="font-size:11px;color:#9aa0a6">ID '+(r.cliente_id||'')+' · '+(r.motivo||'')+' · '+(r.sector||'')+'</div>';
+  html += '</div>';
+
+  html += '<div style="font-size:12px;color:#5f6368;margin-bottom:6px"><b>Vendedor:</b> '+(r.vendedor_nombre||'')+' ('+(r.vendedor_code||'')+') · '+(r.zona||'')+'</div>';
+  html += '<div style="font-size:12px;color:#5f6368;margin-bottom:6px"><b>Comentario:</b> '+(r.comentario||'')+'</div>';
+  if(r.sugerencia) html += '<div style="font-size:12px;color:#5f6368;margin-bottom:6px"><b>Sugerencia:</b> '+r.sugerencia+'</div>';
+  if(r.resolucion) html += '<div style="font-size:12px;color:#5f6368;margin-bottom:6px"><b>Resolución:</b> '+r.resolucion+(r.resolucion_otro?(' — '+r.resolucion_otro):'')+'</div>';
+
+  if(r.fotos && r.fotos.length){
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">';
+    r.fotos.forEach(function(path){
+      html += '<div onclick="adminVerAdjunto(\''+path.replace(/'/g,"\\'")+'\')" style="width:56px;height:56px;border-radius:8px;background:#f1f3f4;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px">📷</div>';
+    });
+    html += '</div>';
+  }
+
+  html += '<div style="font-size:9.5px;font-weight:800;color:#5f6368;text-transform:uppercase;letter-spacing:.5px;margin:10px 0 6px">Mensajes</div>';
+  const mensajes = r.hilo || [];
+  if(!mensajes.length){
+    html += '<div style="text-align:center;color:#9aa0a6;font-size:11.5px;padding:10px">Todavía no hay mensajes.</div>';
+  } else {
+    mensajes.forEach(function(m){
+      const esAdminMsg = m.rol==='admin';
+      html += '<div style="background:'+(esAdminMsg?'#e8f0fe':'#f8f9fa')+';border-radius:8px;padding:8px 10px;margin-bottom:6px">'
+        +'<div style="font-size:10.5px;font-weight:700;color:'+(esAdminMsg?'#1a73e8':'#5f6368')+'">'+(m.autor||(esAdminMsg?'Administración':'Vendedor'))+' · '+fechaCorta(m.fecha)+'</div>'
+        +'<div style="font-size:12px;color:#202124;margin-top:2px">'+m.texto+'</div>'
+        +'</div>';
+    });
+  }
+
+  document.getElementById('reclamo-hilo-info').innerHTML = html;
+
+  const contAdmin = document.getElementById('reclamo-hilo-admin-controles');
+  if(reclamoHiloEsAdmin){
+    contAdmin.style.display='block';
+    let htmlAdmin = '<label class="alta-lbl">Resolución (para Aprobar/Rechazar)</label>'
+      +'<select id="reclamo-hilo-resolucion" class="alta-input">'
+      +'<option value="">Elegir...</option>'
+      + RECLAMO_RESOLUCIONES.map(function(x){ return '<option'+(r.resolucion===x?' selected':'')+'>'+x+'</option>'; }).join('')
+      +'</select>'
+      +'<div id="reclamo-hilo-resolucion-otro-box" style="display:'+(r.resolucion==='OTRO'?'block':'none')+'">'
+      +'<label class="alta-lbl">Especificar resolución</label>'
+      +'<input type="text" id="reclamo-hilo-resolucion-otro" class="alta-input" value="'+(r.resolucion_otro||'').replace(/"/g,'&quot;')+'">'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">';
+    if(estado==='pendiente'){
+      htmlAdmin += '<button onclick="reclamoAdminPasarRevision()" style="flex:1;padding:9px;border:1.5px solid #1a73e8;background:#1a73e8;color:#fff;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer">👁 Pasar a revisión</button>';
+    }
+    htmlAdmin += '<button onclick="reclamoAdminResolver(\'aprobado\')" style="flex:1;padding:9px;border:1.5px solid #188038;background:#188038;color:#fff;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer">✅ Aprobar</button>'
+      +'<button onclick="reclamoAdminResolver(\'rechazado\')" style="flex:1;padding:9px;border:1.5px solid #ea4335;background:#ea4335;color:#fff;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer">❌ Rechazar</button>';
+    if(estado==='aprobado'||estado==='rechazado'){
+      htmlAdmin += '<button onclick="reclamoAdminVolverPendiente()" style="flex:1;padding:9px;border:1px solid #dadce0;background:#fff;color:#5f6368;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer">↺ Volver a pendiente</button>';
+    }
+    htmlAdmin += '</div>';
+    contAdmin.innerHTML = htmlAdmin;
+    document.getElementById('reclamo-hilo-resolucion').onchange = function(){
+      document.getElementById('reclamo-hilo-resolucion-otro-box').style.display = this.value==='OTRO' ? 'block' : 'none';
+    };
+  } else {
+    contAdmin.style.display='none';
+    contAdmin.innerHTML='';
+  }
+}
+
+function reclamoCerrarHilo(){
+  document.getElementById('reclamo-hilo-modal').style.display='none';
+  reclamoHiloActual = null;
+}
+
+async function reclamoEnviarMensaje(){
+  const texto = (document.getElementById('reclamo-hilo-mensaje').value||'').trim();
+  if(!texto){ alert('Escribí un mensaje antes de enviar.'); return; }
+  const r = reclamoHiloActual;
+  if(!r) return;
+  const esAdminMsg = reclamoHiloEsAdmin;
+  const msg = { rol: esAdminMsg?'admin':'vendedor', autor: esAdminMsg?(currentAdmin||'Admin'):currentVendor, texto: texto, fecha: new Date().toISOString() };
+  try{
+    const { db, doc, setDoc, arrayUnion, collection, addDoc } = window.fb;
+    await setDoc(doc(db,'reclamos_pendientes',r.id), { hilo: arrayUnion(msg) }, {merge:true});
+    r.hilo = (r.hilo||[]).concat([msg]);
+    document.getElementById('reclamo-hilo-mensaje').value='';
+    reclamoRenderHilo();
+
+    if(!esAdminMsg){
+      try{
+        const destinatarios = ALTAS_NOTIFY_EMAILS.concat(RECLAMO_SECTOR_MAILS[r.sector]||[]);
+        await addDoc(collection(db,'mail'), {
+          to: destinatarios,
+          message: { subject: '💬 Nueva réplica en reclamo '+r.codigo_reclamo, html: '<p>El vendedor '+(r.vendedor_nombre||'')+' respondió en el reclamo '+r.codigo_reclamo+':</p><p>'+texto+'</p>' }
+        });
+      }catch(mailErr){ console.error('[reclamoEnviarMensaje] mail', mailErr); }
+      await setDoc(doc(db,'reclamos_vistas',r.id), { mensajes_vistos: r.hilo.length }, {merge:true});
+    } else if(typeof reclamoCargarReclamosAdmin === 'function'){
+      await reclamoCargarReclamosAdmin();
+    }
+  }catch(err){
+    console.error('[reclamoEnviarMensaje]', err);
+    alert('Error al enviar el mensaje: '+(err.message||err));
+  }
+}
+
+async function reclamoAdminResolver(nuevoEstado){
+  const r = reclamoHiloActual;
+  if(!r) return;
+  const resolucion = document.getElementById('reclamo-hilo-resolucion').value;
+  const resolucionOtro = (document.getElementById('reclamo-hilo-resolucion-otro').value||'').trim();
+  const mensajeTexto = (document.getElementById('reclamo-hilo-mensaje').value||'').trim();
+
+  if(!resolucion){ alert('Elegí una Resolución antes de '+(nuevoEstado==='aprobado'?'aprobar':'rechazar')+'.'); return; }
+  if(resolucion==='OTRO' && !resolucionOtro){ alert('Especificá la resolución (elegiste "Otro").'); return; }
+  if(!confirm('¿Confirmás '+(nuevoEstado==='aprobado'?'aprobar':'rechazar')+' este reclamo?')) return;
+
+  try{
+    const { db, doc, setDoc, serverTimestamp, arrayUnion } = window.fb;
+    const msg = { rol:'admin', autor: currentAdmin||'Admin', texto: mensajeTexto || '(Resuelto sin comentario adicional)', fecha: new Date().toISOString() };
+    await setDoc(doc(db,'reclamos_pendientes',r.id), {
+      estado: nuevoEstado, resolucion, resolucion_otro: resolucion==='OTRO'?resolucionOtro:'',
+      resuelto_por: currentAdmin||'', fecha_resolucion: serverTimestamp(),
+      hilo: arrayUnion(msg)
+    }, {merge:true});
+    document.getElementById('reclamo-hilo-mensaje').value='';
+    await reclamoAbrirHilo(r.id, true);
+    if(typeof reclamoCargarReclamosAdmin === 'function') await reclamoCargarReclamosAdmin();
+  }catch(err){
+    console.error('[reclamoAdminResolver]', err);
+    alert('Error al resolver: '+(err.message||err));
+  }
+}
+
+async function reclamoAdminPasarRevision(){
+  const r = reclamoHiloActual;
+  if(!r) return;
+  if(!confirm('¿Pasar este reclamo a "En revisión"?')) return;
+  try{
+    const { db, doc, setDoc } = window.fb;
+    await setDoc(doc(db,'reclamos_pendientes',r.id), { estado:'en_revision' }, {merge:true});
+    await reclamoAbrirHilo(r.id, true);
+    if(typeof reclamoCargarReclamosAdmin === 'function') await reclamoCargarReclamosAdmin();
+  }catch(err){
+    console.error('[reclamoAdminPasarRevision]', err);
+    alert('Error: '+(err.message||err));
+  }
+}
+
+async function reclamoAdminVolverPendiente(){
+  const r = reclamoHiloActual;
+  if(!r) return;
+  if(!confirm('¿Devolver este reclamo a Pendiente?')) return;
+  try{
+    const { db, doc, setDoc } = window.fb;
+    await setDoc(doc(db,'reclamos_pendientes',r.id), { estado:'pendiente', resuelto_por:null, fecha_resolucion:null }, {merge:true});
+    await reclamoAbrirHilo(r.id, true);
+    if(typeof reclamoCargarReclamosAdmin === 'function') await reclamoCargarReclamosAdmin();
+  }catch(err){
+    console.error('[reclamoAdminVolverPendiente]', err);
+    alert('Error: '+(err.message||err));
+  }
+}
+
+async function reclamoChequearPopup(){
+  try{
+    const { db, collection, getDocs, query, where, doc, getDoc } = window.fb;
+    const code = getVendorCode();
+    const q = query(collection(db,'reclamos_pendientes'), where('vendedor_code','==',code));
+    const snap = await getDocs(q);
+    const candidatos = [];
+    snap.forEach(function(d){
+      const data = d.data();
+      const hilo = data.hilo||[];
+      if(!hilo.length) return;
+      const ultimo = hilo[hilo.length-1];
+      if(ultimo.rol==='admin') candidatos.push(Object.assign({id:d.id, _totalMensajes:hilo.length, _ultimoMensaje:ultimo}, data));
+    });
+    if(!candidatos.length) return;
+
+    for(const c of candidatos){
+      let vistos = 0;
+      try{
+        const vistaSnap = await getDoc(doc(db,'reclamos_vistas',c.id));
+        if(vistaSnap.exists()) vistos = vistaSnap.data().mensajes_vistos || 0;
+      }catch(e){}
+      if(c._totalMensajes > vistos){
+        reclamoMostrarPopup(c);
+        return;
+      }
+    }
+  }catch(err){
+    console.error('[reclamoChequearPopup]', err);
+  }
+}
+
+function reclamoMostrarPopup(r){
+  reclamoPopupActualId = r.id;
+  document.getElementById('reclamo-popup-codigo').textContent = r.codigo_reclamo || '';
+  document.getElementById('reclamo-popup-cliente').textContent = r.cliente_nombre || '';
+  document.getElementById('reclamo-popup-estado').textContent = RECLAMO_ESTADO_LABELS[r.estado||'pendiente'];
+  document.getElementById('reclamo-popup-mensaje').textContent = r._ultimoMensaje ? r._ultimoMensaje.texto : '';
+  document.getElementById('reclamo-popup').style.display = 'flex';
+}
+
+async function reclamoMarcarVistoActual(){
+  const id = reclamoPopupActualId;
+  if(!id) return;
+  try{
+    const { db, doc, getDoc, setDoc } = window.fb;
+    const snap = await getDoc(doc(db,'reclamos_pendientes',id));
+    const total = snap.exists() ? (snap.data().hilo||[]).length : 0;
+    await setDoc(doc(db,'reclamos_vistas',id), { mensajes_vistos: total }, {merge:true});
+  }catch(err){ console.error('[reclamoMarcarVistoActual]', err); }
+}
+
+async function reclamoPopupCerrar(){
+  document.getElementById('reclamo-popup').style.display='none';
+  await reclamoMarcarVistoActual();
+  reclamoPopupActualId = null;
+  reclamoChequearPopup();
+}
+
+async function reclamoPopupVerDetalle(){
+  const id = reclamoPopupActualId;
+  document.getElementById('reclamo-popup').style.display='none';
+  await reclamoMarcarVistoActual();
+  reclamoPopupActualId = null;
+  await reclamoAbrirHilo(id, false);
 }
 
 // ── VENDEDOR: Buscador y Ficha de Cliente (pestaña Clientes) ──
@@ -4152,6 +4777,7 @@ function initAdminApp(){
   adminSetTab('ruta');
   if(!adminMap) initAdminMap();
   setTimeout(()=>{ if(adminMap) adminMap.invalidateSize(); adminBuildRuta(); }, 50);
+  adminChequearReclamosPendientes();
 }
 
 function adminPopulateFilters(){
@@ -4162,7 +4788,7 @@ function adminPopulateFilters(){
   compVendSel.innerHTML = '<option value="">Todos</option>' + vendors.map(v=>`<option value="${v}">${v}</option>`).join('');
 }
 
-const ADMIN_TAB_GROUPS = { ruteo: ['ruta','comparativa','cambios'], operaciones: ['altas','lanzamientos'] };
+const ADMIN_TAB_GROUPS = { ruteo: ['ruta','comparativa','cambios'], operaciones: ['altas','lanzamientos','reclamos'] };
 var adminMainTab = 'ruteo';
 var adminGroupLastTab = { ruteo: 'ruta', operaciones: 'altas' };
 
@@ -4189,7 +4815,7 @@ function adminSetTab(t){
   Object.keys(ADMIN_TAB_GROUPS).forEach(function(g){
     if(ADMIN_TAB_GROUPS[g].indexOf(t)!==-1) adminGroupLastTab[g] = t;
   });
-  ['ruta','comparativa','cambios','altas','lanzamientos'].forEach(function(tt){
+  ['ruta','comparativa','cambios','altas','lanzamientos','reclamos'].forEach(function(tt){
     const btn=document.getElementById('admin-tab-'+tt);
     if(btn){
       btn.style.borderBottomColor = tt===t ? '#2c3e50' : 'transparent';
@@ -4203,6 +4829,7 @@ function adminSetTab(t){
   if(t==='comparativa'){ setTimeout(()=>adminBuildComparativa(),50); }
   if(t==='altas'){ adminCargarAltas(); }
   if(t==='lanzamientos'){ lanzInitForm(); lanzCargarLista(); }
+  if(t==='reclamos'){ reclamoCargarReclamosAdmin(); }
 }
 
 function initAdminMap(){
@@ -4861,6 +5488,129 @@ async function adminExportAltasExcel(){
     console.error('[adminExportAltasExcel]', err);
     alert('Error al generar el Excel: '+(err.message||err));
   }
+}
+
+// ── ADMIN: Reclamos ──
+var reclamoAdminCache = [];
+var reclamoAdminFiltro = 'pendiente'; // 'pendiente' | 'en_revision' | 'aprobado' | 'rechazado' | 'todas'
+
+async function reclamoCargarReclamosAdmin(){
+  const el = document.getElementById('reclamo-admin-content');
+  if(!el) return;
+  el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px 10px">Cargando...</div>';
+  try{
+    const { db, collection, getDocs, query, orderBy } = window.fb;
+    const snap = await getDocs(query(collection(db,'reclamos_pendientes'), orderBy('fecha_creacion','desc')));
+    reclamoAdminCache = [];
+    snap.forEach(d=>{ reclamoAdminCache.push(Object.assign({id:d.id}, d.data())); });
+    reclamoRenderFiltrosAdmin();
+    reclamoRenderListaAdmin();
+  }catch(err){
+    console.error('[reclamoCargarReclamosAdmin]', err);
+    el.innerHTML = '<div style="text-align:center;color:#ea4335;font-size:12.5px;padding:16px 10px">Error al cargar: '+(err.message||err)+'</div>';
+  }
+}
+
+function reclamoRenderFiltrosAdmin(){
+  const el = document.getElementById('reclamo-admin-filtros');
+  if(!el) return;
+  const counts = {pendiente:0, en_revision:0, aprobado:0, rechazado:0};
+  reclamoAdminCache.forEach(r=>{
+    const e = r.estado || 'pendiente';
+    if(counts[e]===undefined) counts[e]=0;
+    counts[e]++;
+  });
+  const opciones = [
+    {key:'pendiente', label:'Pendientes', count:counts.pendiente, color:'#f9ab00'},
+    {key:'en_revision', label:'En revisión', count:counts.en_revision, color:'#1a73e8'},
+    {key:'aprobado',  label:'Aprobadas',  count:counts.aprobado,  color:'#188038'},
+    {key:'rechazado', label:'Rechazadas', count:counts.rechazado, color:'#ea4335'},
+    {key:'todas',     label:'Todas',      count:reclamoAdminCache.length, color:'#2c3e50'}
+  ];
+  el.innerHTML = opciones.map(function(o){
+    const activo = reclamoAdminFiltro===o.key;
+    return '<button onclick="reclamoSetFiltroAdmin(\''+o.key+'\')" style="font-size:11px;padding:6px 12px;border:1.5px solid '+o.color+';color:'+(activo?'#fff':o.color)+';background:'+(activo?o.color:'#fff')+';border-radius:16px;cursor:pointer;font-weight:700">'+o.label+' ('+o.count+')</button>';
+  }).join('');
+}
+
+function reclamoSetFiltroAdmin(f){
+  reclamoAdminFiltro = f;
+  reclamoRenderFiltrosAdmin();
+  reclamoRenderListaAdmin();
+}
+
+function reclamoRenderListaAdmin(){
+  const el = document.getElementById('reclamo-admin-content');
+  if(!el) return;
+  const lista = reclamoAdminFiltro==='todas' ? reclamoAdminCache : reclamoAdminCache.filter(r=>(r.estado||'pendiente')===reclamoAdminFiltro);
+  if(!lista.length){
+    el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px 10px">No hay reclamos en esta categoría.</div>';
+    return;
+  }
+  const badgeColor = {pendiente:'#f9ab00', en_revision:'#1a73e8', aprobado:'#188038', rechazado:'#ea4335'};
+  el.innerHTML = lista.map(function(r){
+    const estado = r.estado||'pendiente';
+    const cantMsg = (r.hilo||[]).length;
+    return `<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:14px 16px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <div style="font-size:13.5px;font-weight:700;color:#2c3e50">${r.codigo_reclamo||''}</div>
+            <span style="font-size:9.5px;font-weight:700;color:#fff;background:${badgeColor[estado]};border-radius:10px;padding:2px 8px">${RECLAMO_ESTADO_LABELS[estado]}</span>
+          </div>
+          <div style="font-size:11px;color:#9aa0a6">${r.cliente_nombre||''} · ID ${r.cliente_id||''}</div>
+        </div>
+        <div style="font-size:10px;color:#9aa0a6;text-align:right;white-space:nowrap">${adminFmtFechaAlta(r.fecha_creacion)}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:11.5px;color:#5f6368;margin-bottom:8px">
+        <div><b>Motivo:</b> ${r.motivo||''}</div>
+        <div><b>Sector:</b> ${r.sector||''}</div>
+        <div><b>Vendedor:</b> ${r.vendedor_nombre||''} (${r.vendedor_code||''})</div>
+        <div><b>Zona:</b> ${r.zona||'—'}</div>
+      </div>
+      <div style="font-size:11.5px;color:#5f6368;margin-bottom:8px"><b>Comentario:</b> ${r.comentario||''}</div>
+      ${r.sugerencia ? `<div style="font-size:11.5px;color:#5f6368;margin-bottom:8px"><b>Sugerencia:</b> ${r.sugerencia}</div>` : ''}
+      <div style="font-size:10.5px;color:#9aa0a6;margin-bottom:10px">📷 ${(r.fotos||[]).length} foto(s) · 💬 ${cantMsg} mensaje(s)</div>
+      <button onclick="reclamoAbrirHilo('${r.id}', true)" style="width:100%;padding:9px;border:1.5px solid #f9ab00;background:#f9ab00;color:#fff;border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer">Ver / Responder</button>
+    </div>`;
+  }).join('');
+}
+
+// Popup del Admin al entrar: resumen de reclamos que necesitan atención
+async function adminChequearReclamosPendientes(){
+  try{
+    const { db, collection, getDocs, query, where } = window.fb;
+    const snap = await getDocs(query(collection(db,'reclamos_pendientes'), where('estado','in',['pendiente','en_revision'])));
+    const lista = [];
+    snap.forEach(d=>{ lista.push(Object.assign({id:d.id}, d.data())); });
+    if(!lista.length) return;
+
+    document.getElementById('admin-reclamos-popup-resumen').textContent = lista.length+' reclamo(s) esperando revisión o respuesta.';
+    document.getElementById('admin-reclamos-popup-lista').innerHTML = lista.map(function(r){
+      const estado = r.estado||'pendiente';
+      const badgeColor = estado==='en_revision' ? '#1a73e8' : '#f9ab00';
+      return '<div style="background:#f8f9fa;border-radius:8px;padding:10px 12px;margin-bottom:8px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+        +'<div style="font-size:12.5px;font-weight:700;color:#202124">'+(r.codigo_reclamo||'')+' · '+(r.cliente_nombre||'')+'</div>'
+        +'<span style="font-size:9px;font-weight:700;color:#fff;background:'+badgeColor+';border-radius:10px;padding:2px 8px;white-space:nowrap">'+RECLAMO_ESTADO_LABELS[estado]+'</span>'
+        +'</div>'
+        +'<div style="font-size:11px;color:#9aa0a6;margin-top:2px">'+(r.motivo||'')+' · '+(r.sector||'')+'</div>'
+        +'</div>';
+    }).join('');
+    document.getElementById('admin-reclamos-popup').style.display = 'flex';
+  }catch(err){
+    console.error('[adminChequearReclamosPendientes]', err);
+  }
+}
+
+function adminReclamosPopupCerrar(){
+  document.getElementById('admin-reclamos-popup').style.display = 'none';
+}
+
+function adminReclamosPopupIrATab(){
+  document.getElementById('admin-reclamos-popup').style.display = 'none';
+  adminSetMainTab('operaciones');
+  adminSetTab('reclamos');
 }
 
 // Trae el archivo adjunto real desde Storage (bytes) y lo abre en una pestaña nueva.
@@ -6488,6 +7238,7 @@ function supRenderHelados(data){
     <button id="admin-tab-cambios" onclick="adminSetTab('cambios')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b">CAMBIOS</button>
     <button id="admin-tab-altas" onclick="adminSetTab('altas')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b;display:none">ABM CLIENTES</button>
     <button id="admin-tab-lanzamientos" onclick="adminSetTab('lanzamientos')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b;display:none">LANZAMIENTOS</button>
+    <button id="admin-tab-reclamos" onclick="adminSetTab('reclamos')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b;display:none">RECLAMOS</button>
   </div>
   <!-- RUTA panel: sidebar + map -->
   <div id="admin-panel-ruta" style="display:flex;flex:1;overflow:hidden">
@@ -6694,6 +7445,15 @@ function supRenderHelados(data){
       <div id="lanz-filtro-rubros" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
       <div id="lanz-lista-content"></div>
     </div>
+  </div>
+
+  <!-- RECLAMOS -->
+  <div id="admin-panel-reclamos" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+    <div style="background:#f8f9fa;border-bottom:1px solid #e8eaed;padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;flex-shrink:0">
+      <div id="reclamo-admin-filtros" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      <button onclick="reclamoCargarReclamosAdmin()" style="font-size:11px;padding:6px 12px;border:1.5px solid #2c3e50;color:#2c3e50;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">🔄 Actualizar</button>
+    </div>
+    <div id="reclamo-admin-content" style="flex:1;overflow-y:auto;padding:14px 16px"></div>
   </div>
 
   <!-- ERP EXPORT MODAL (Fase 3) -->
