@@ -542,8 +542,19 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
   </div>
   <div style="flex:1;overflow-y:auto;padding:16px">
 
+    <!-- Sin lote abierto: hay que abrirlo a propósito, no se abre solo -->
+    <div id="cobranza-sin-lote" style="display:none;text-align:center;padding:20px 10px">
+      <div style="font-size:32px;margin-bottom:10px">📂</div>
+      <div style="font-size:14px;font-weight:700;color:#202124;margin-bottom:8px">No tenés un lote de cobranza abierto</div>
+      <div style="font-size:12px;color:#5f6368;line-height:1.5;margin-bottom:18px">
+        Un lote agrupa todos los recibos que generás hasta que lo cierres y rindas en la oficina.
+        Abrí uno nuevo para empezar a cobrar.
+      </div>
+      <button id="cobranza-btn-abrir-lote" onclick="cobranzaAbrirLoteManual()" style="background:#0d652d;color:#fff;border:none;border-radius:8px;padding:12px 24px;font-weight:700;font-size:13px;cursor:pointer">📂 Abrir nuevo lote</button>
+    </div>
+
     <!-- Paso 1: buscar cliente -->
-    <div id="cobranza-paso-buscar">
+    <div id="cobranza-paso-buscar" style="display:none">
       <label class="alta-lbl">Buscar cliente por código o nombre</label>
       <input type="text" id="cobranza-buscar" class="alta-input" oninput="cobranzaBuscarCliente()" placeholder="Ej: 15449 o Kiosco Don José">
       <div id="cobranza-resultados" style="margin-top:10px"></div>
@@ -564,6 +575,12 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
       <button onclick="cobranzaVolverBuscar()" style="width:100%;margin-top:8px;padding:10px;border:1px solid #dadce0;background:#fff;color:#5f6368;border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer">‹ Cambiar cliente</button>
     </div>
 
+    <!-- Recibos ya generados en este lote (solo visible con lote abierto) -->
+    <div id="cobranza-recibos-lote" style="display:none;margin-top:22px">
+      <div style="font-size:9.5px;font-weight:800;color:#5f6368;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Recibos de este lote</div>
+      <div id="cobranza-recibos-lote-lista"></div>
+    </div>
+
   </div>
 </div>
 
@@ -578,6 +595,25 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
   </div>
   <div style="flex:1;overflow-y:auto;padding:16px" id="cobranza-wizard-content"></div>
 </div>
+
+<!-- Mis Cobranzas — Detalle del recibo (Fase 4: ver / compartir / anular) -->
+<div class="panel" id="panel-cobranza-recibo" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
+  <div style="background:#0d652d;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+    <span onclick="cobranzaVolverDesdeRecibo()" style="color:#fff;font-size:20px;cursor:pointer;padding:2px 6px">←</span>
+    <div>
+      <div style="color:#fff;font-weight:800;font-size:14px">🧾 Recibo</div>
+      <div style="color:#d3ecdd;font-size:11px" id="cobranza-recibo-numero-header"></div>
+    </div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px" id="cobranza-recibo-content"></div>
+  <div style="border-top:1px solid #e8eaed;padding:12px 16px;flex-shrink:0;background:#fafafa;display:flex;gap:8px">
+    <button id="cobranza-recibo-btn-compartir" onclick="cobranzaCompartirRecibo()" style="flex:1;padding:11px;border:none;background:#0d652d;color:#fff;border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer">📤 Compartir / PDF</button>
+    <button id="cobranza-recibo-btn-anular" onclick="cobranzaAnularRecibo()" style="display:none;flex:1;padding:11px;border:1.5px solid #ea4335;background:#fff;color:#ea4335;border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer">🚫 Anular</button>
+  </div>
+</div>
+
+<!-- Contenedor oculto usado solo para generar el QR del recibo -->
+<div id="cobranza-qr-hidden" style="position:fixed;left:-9999px;top:0"></div>
 
 <!-- ALTA NUEVO CLIENTE -->
 <div class="panel" id="panel-alta-cliente" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
@@ -1035,6 +1071,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
       <span onclick="lanzCerrarFicha()" style="color:#fff;font-size:20px;cursor:pointer;flex-shrink:0">✕</span>
     </div>
     <div style="overflow-y:auto;flex:1">
+      <div id="lanz-ficha-reemplaza-banner" style="display:none;background:#fff3cd;color:#7a5c00;font-size:11.5px;font-weight:700;text-align:center;padding:8px 12px"></div>
       <img id="lanz-ficha-img" src="" style="width:100%;height:180px;object-fit:contain;background:#f8f9fa;display:block" alt="">
       <div style="padding:16px">
         <div id="lanz-ficha-rubro" style="font-size:10.5px;font-weight:800;color:#188038;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px"></div>
@@ -1046,7 +1083,6 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
           <tr><td style="padding:5px 10px 5px 0;color:#9aa0a6;font-size:11.5px;white-space:nowrap;vertical-align:top"><b>Precio s/IVA</b></td><td id="lanz-ficha-precio" style="padding:5px 0;font-size:11.5px;color:#202124"></td></tr>
           <tr><td style="padding:5px 10px 5px 0;color:#9aa0a6;font-size:11.5px;white-space:nowrap;vertical-align:top"><b>Fecha de ingreso</b></td><td id="lanz-ficha-fecha" style="padding:5px 0;font-size:11.5px;color:#202124"></td></tr>
           <tr><td style="padding:5px 10px 5px 0;color:#9aa0a6;font-size:11.5px;white-space:nowrap;vertical-align:top"><b>Cantidad ingresada</b></td><td id="lanz-ficha-cant-ingresada" style="padding:5px 0;font-size:11.5px;color:#202124"></td></tr>
-          <tr><td style="padding:5px 10px 5px 0;color:#9aa0a6;font-size:11.5px;white-space:nowrap;vertical-align:top"><b>Reemplaza código</b></td><td id="lanz-ficha-reemplaza" style="padding:5px 0;font-size:11.5px;color:#202124"></td></tr>
           <tr><td style="padding:5px 10px 5px 0;color:#9aa0a6;font-size:11.5px;white-space:nowrap;vertical-align:top"><b>Sin TACC</b></td><td id="lanz-ficha-tacc" style="padding:5px 0;font-size:11.5px;color:#202124"></td></tr>
         </table>
       </div>
@@ -1110,6 +1146,22 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
       <div style="font-size:12px;color:#5f6368" id="baja-popup-resuelto-por"></div>
     </div>
     <button onclick="bajaPopupCerrar()" style="width:100%;padding:13px;border:none;border-top:1px solid #f1f3f4;background:#fff;color:#5f6368;font-weight:700;font-size:12.5px;cursor:pointer">Entendido</button>
+  </div>
+</div>
+
+<!-- Popup de aviso: el alta fue aprobada y ya tiene código de cliente del ERP -->
+<div id="alta-popup" style="display:none;position:fixed;inset:0;background:#0007;z-index:4200;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:14px;overflow:hidden;max-width:380px;width:100%">
+    <div style="padding:16px;color:#fff;background:#188038">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;opacity:.85">✅ Alta aprobada</div>
+      <div style="font-size:15px;font-weight:800;margin-top:2px">Ya tenés el código de cliente</div>
+    </div>
+    <div style="padding:16px">
+      <div style="font-size:13px;font-weight:700;color:#202124;margin-bottom:10px" id="alta-popup-cliente"></div>
+      <div style="font-size:11px;color:#9aa0a6;margin-bottom:4px">Código de cliente asignado por el ERP</div>
+      <div style="font-size:24px;font-weight:900;color:#188038" id="alta-popup-codigo"></div>
+    </div>
+    <button onclick="altaPopupCerrar()" style="width:100%;padding:13px;border:none;border-top:1px solid #f1f3f4;background:#fff;color:#5f6368;font-weight:700;font-size:12.5px;cursor:pointer">Entendido</button>
   </div>
 </div>
 
@@ -1513,6 +1565,7 @@ function initAppForVendor(){
   modcliChequearPopup();
   bajaChequearPopup();
   reclamoChequearPopup();
+  altaChequearPopup();
 }
 
 // ── UTILS ──
@@ -2035,7 +2088,13 @@ function lanzAbrirFicha(id){
   document.getElementById('lanz-ficha-precio').textContent = '$'+(l.precio_sin_iva!=null ? Number(l.precio_sin_iva).toFixed(2) : '—')+' s/IVA';
   document.getElementById('lanz-ficha-fecha').textContent = fmtFechaCorta(l.fecha_ingreso);
   document.getElementById('lanz-ficha-cant-ingresada').textContent = l.cantidad_ingresada!=null ? l.cantidad_ingresada : '—';
-  document.getElementById('lanz-ficha-reemplaza').textContent = l.reemplaza_codigo ? l.reemplaza_codigo : 'No';
+  const bannerReemplaza = document.getElementById('lanz-ficha-reemplaza-banner');
+  if(l.reemplaza_codigo){
+    bannerReemplaza.style.display = 'block';
+    bannerReemplaza.textContent = '🔁 Reemplaza código '+l.reemplaza_codigo+(l.reemplaza_stock!=null ? ' · Stock remanente: '+l.reemplaza_stock : '');
+  } else {
+    bannerReemplaza.style.display = 'none';
+  }
   document.getElementById('lanz-ficha-tacc').textContent = l.sin_tacc==='Si' ? 'Sí' : 'No';
 
   const img = document.getElementById('lanz-ficha-img');
@@ -2895,6 +2954,59 @@ async function bajaPopupCerrar(){
   bajaChequearPopup();
 }
 
+// ── VENDEDOR: Popup de aviso — Alta aprobada con código de cliente del ERP ──
+var altaPopupActualId = null;
+
+async function altaChequearPopup(){
+  try{
+    const { db, collection, getDocs, query, where, doc, getDoc } = window.fb;
+    const code = getVendorCode();
+    const q = query(collection(db,'altas_pendientes'), where('vendedor_code','==',code));
+    const snap = await getDocs(q);
+    const conCodigo = [];
+    snap.forEach(function(d){
+      const data = d.data();
+      if(data.codigo_erp) conCodigo.push(Object.assign({id:d.id}, data));
+    });
+    if(!conCodigo.length) return;
+
+    for(const a of conCodigo){
+      let visto = false;
+      try{
+        const vistaSnap = await getDoc(doc(db,'altas_vistas',a.id));
+        visto = vistaSnap.exists();
+      }catch(e){}
+      if(!visto){
+        altaMostrarPopupResuelta(a);
+        return; // una sola por vez
+      }
+    }
+  }catch(err){
+    console.error('[altaChequearPopup]', err);
+  }
+}
+
+function altaMostrarPopupResuelta(a){
+  altaPopupActualId = a.id;
+  document.getElementById('alta-popup-cliente').textContent = a.nombre_negocio || a.razon_social || '';
+  document.getElementById('alta-popup-codigo').textContent = a.codigo_erp || '';
+  document.getElementById('alta-popup').style.display = 'flex';
+}
+
+async function altaPopupCerrar(){
+  document.getElementById('alta-popup').style.display = 'none';
+  const id = altaPopupActualId;
+  altaPopupActualId = null;
+  if(!id) return;
+  try{
+    const { db, doc, setDoc } = window.fb;
+    await setDoc(doc(db,'altas_vistas',id), { vista_en: new Date().toISOString() });
+  }catch(err){
+    console.error('[altaPopupCerrar]', err);
+  }
+  altaChequearPopup();
+}
+
 // ── VENDEDOR: Reclamos ──
 var reclamoClienteSel = null;
 var reclamoHiloActual = null; // {id, ...data} del reclamo abierto en el modal de hilo
@@ -3422,19 +3534,43 @@ function money(n){
   return '$'+n.toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 
+// Denominaciones de billetes en circulación en Argentina (mismo criterio que
+// el cierre de caja de la app de transportistas).
+const DENOMINACIONES_ARS_COBRANZA = [20000, 10000, 2000, 1000, 500, 200, 100, 50, 20, 10];
+
+function cobranzaCalcularTotalBilletes(){
+  const b = cobranzaWizardState.efectivo_billetes||{};
+  let total = 0;
+  DENOMINACIONES_ARS_COBRANZA.forEach(function(d){ total += d*(Number(b[d])||0); });
+  return total;
+}
+
+function cobranzaSetEfectivoModo(modo){
+  cobranzaWizardState.efectivo_modo = modo;
+  if(modo==='total'){
+    cobranzaWizardState.efectivo_billetes = {};
+  } else {
+    cobranzaWizardState.efectivo = cobranzaCalcularTotalBilletes();
+  }
+  cobranzaRenderWizard();
+}
+
 async function cobranzaAbrir(){
   switchTab('cobranza');
   document.getElementById('cobranza-buscar').value='';
   document.getElementById('cobranza-resultados').innerHTML='';
   document.getElementById('cobranza-paso-comprobantes').style.display='none';
-  document.getElementById('cobranza-paso-buscar').style.display='block';
+  document.getElementById('cobranza-paso-buscar').style.display='none';
+  document.getElementById('cobranza-sin-lote').style.display='none';
   cobranzaClienteSel = null;
-  await cobranzaAsegurarLoteAbierto();
+  await cobranzaChequearLote();
 }
 
-async function cobranzaAsegurarLoteAbierto(){
+// Solo REVISA si ya hay un lote abierto — a propósito NO crea uno solo, para
+// que el vendedor entienda bien que abrir/cerrar un lote es una acción suya.
+async function cobranzaChequearLote(){
   const infoEl = document.getElementById('cobranza-lote-info');
-  infoEl.textContent = 'Buscando tu lote abierto...';
+  infoEl.textContent = 'Verificando...';
   try{
     const { db, collection, getDocs, query, where } = window.fb;
     const code = getVendorCode();
@@ -3443,13 +3579,34 @@ async function cobranzaAsegurarLoteAbierto(){
     if(!snap.empty){
       const d = snap.docs[0];
       cobranzaLoteActual = Object.assign({id:d.id}, d.data());
+      cobranzaMostrarInfoLote();
+      document.getElementById('cobranza-sin-lote').style.display='none';
+      document.getElementById('cobranza-paso-buscar').style.display='block';
     } else {
-      cobranzaLoteActual = await cobranzaCrearLote();
+      cobranzaLoteActual = null;
+      infoEl.textContent = 'Sin lote abierto';
+      document.getElementById('cobranza-sin-lote').style.display='block';
+      document.getElementById('cobranza-paso-buscar').style.display='none';
     }
-    cobranzaMostrarInfoLote();
   }catch(err){
-    console.error('[cobranzaAsegurarLoteAbierto]', err);
-    infoEl.textContent = 'Error al abrir el lote: '+(err.message||err);
+    console.error('[cobranzaChequearLote]', err);
+    infoEl.textContent = 'Error al verificar el lote';
+  }
+}
+
+async function cobranzaAbrirLoteManual(){
+  const btn = document.getElementById('cobranza-btn-abrir-lote');
+  btn.disabled = true; btn.textContent = 'Abriendo...';
+  try{
+    cobranzaLoteActual = await cobranzaCrearLote();
+    cobranzaMostrarInfoLote();
+    document.getElementById('cobranza-sin-lote').style.display='none';
+    document.getElementById('cobranza-paso-buscar').style.display='block';
+  }catch(err){
+    console.error('[cobranzaAbrirLoteManual]', err);
+    alert('Error al abrir el lote: '+(err.message||err));
+  }finally{
+    btn.disabled=false; btn.textContent='📂 Abrir nuevo lote';
   }
 }
 
@@ -3477,6 +3634,308 @@ function cobranzaMostrarInfoLote(){
   const l = cobranzaLoteActual;
   if(!l) return;
   document.getElementById('cobranza-lote-info').textContent = l.numero_lote+' · abierto';
+  cobranzaCargarRecibosLote();
+}
+
+async function cobranzaCargarRecibosLote(){
+  if(!cobranzaLoteActual) return;
+  const wrap = document.getElementById('cobranza-recibos-lote');
+  const el = document.getElementById('cobranza-recibos-lote-lista');
+  wrap.style.display = 'block';
+  el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12px;padding:10px">Cargando...</div>';
+  try{
+    const { db, collection, getDocs, query, where } = window.fb;
+    const q = query(collection(db,'recibos_cobranza'), where('lote_id','==',cobranzaLoteActual.id));
+    const snap = await getDocs(q);
+    const lista = [];
+    snap.forEach(function(d){ lista.push(Object.assign({id:d.id}, d.data())); });
+    lista.sort(function(a,b){
+      const ta = a.fecha_hora && a.fecha_hora.toMillis ? a.fecha_hora.toMillis() : 0;
+      const tb = b.fecha_hora && b.fecha_hora.toMillis ? b.fecha_hora.toMillis() : 0;
+      return tb-ta;
+    });
+    if(!lista.length){
+      el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12px;padding:10px">Todavía no generaste ningún recibo en este lote.</div>';
+      return;
+    }
+    el.innerHTML = lista.map(function(r){
+      const anulado = r.estado==='anulado';
+      return `<div onclick="cobranzaVerRecibo('${r.id}')" style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;${anulado?'opacity:.55':''}">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:12.5px;font-weight:700;color:#202124">${r.numero_recibo}</div>
+          ${anulado ? '<span style="font-size:9px;font-weight:700;color:#fff;background:#ea4335;border-radius:10px;padding:2px 8px">ANULADO</span>' : ''}
+        </div>
+        <div style="font-size:11px;color:#80868b">${r.cliente_nombre||''} · ${money(r.total_registrado)}</div>
+      </div>`;
+    }).join('');
+  }catch(err){
+    console.error('[cobranzaCargarRecibosLote]', err);
+    el.innerHTML = '<div style="text-align:center;color:#ea4335;font-size:12px;padding:10px">Error al cargar recibos.</div>';
+  }
+}
+
+function cobranzaFmtFechaHora(ts){
+  if(!ts || typeof ts.toDate !== 'function') return '';
+  const d = ts.toDate();
+  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+
+// ── Generación de QR (lazy-load, sin dependencias pesadas) ──
+var qrcodeLibLoaded = false;
+function ensureQRCodeLib(){
+  if(qrcodeLibLoaded && typeof QRCode!=='undefined') return Promise.resolve();
+  return new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    s.onload=()=>{qrcodeLibLoaded=true;res();};
+    s.onerror=()=>rej(new Error('No se pudo cargar el generador de QR'));
+    document.head.appendChild(s);
+  });
+}
+
+async function cobranzaGenerarQR(texto){
+  await ensureQRCodeLib();
+  const cont = document.getElementById('cobranza-qr-hidden');
+  cont.innerHTML = '';
+  new QRCode(cont, { text: texto, width: 180, height: 180, correctLevel: QRCode.CorrectLevel.M });
+  await new Promise(function(res){ setTimeout(res, 80); }); // darle un instante a que renderice
+  const canvas = cont.querySelector('canvas');
+  const img = cont.querySelector('img');
+  const dataUrl = canvas ? canvas.toDataURL('image/png') : (img ? img.src : null);
+  cont.innerHTML = '';
+  return dataUrl;
+}
+
+// ── Ver / anular un recibo ──
+var cobranzaRecibiendoActual = null;
+var cobranzaRecibiendoQrDataUrl = null;
+
+async function cobranzaVerRecibo(id){
+  try{
+    const { db, doc, getDoc } = window.fb;
+    const snap = await getDoc(doc(db,'recibos_cobranza',id));
+    if(!snap.exists()){ alert('No se encontró el recibo.'); return; }
+    cobranzaRecibiendoActual = Object.assign({id:snap.id}, snap.data());
+  }catch(err){
+    console.error('[cobranzaVerRecibo]', err);
+    alert('Error al cargar el recibo: '+(err.message||err));
+    return;
+  }
+  cobranzaRecibiendoQrDataUrl = null;
+  document.getElementById('cobranza-recibo-numero-header').textContent = cobranzaRecibiendoActual.numero_recibo;
+  switchTab('cobranza-recibo');
+  await cobranzaRenderRecibo();
+}
+
+function cobranzaVolverDesdeRecibo(){
+  cobranzaRecibiendoActual = null;
+  cobranzaRecibiendoQrDataUrl = null;
+  switchTab('cobranza');
+  cobranzaCargarRecibosLote();
+}
+
+async function cobranzaRenderRecibo(){
+  const r = cobranzaRecibiendoActual;
+  if(!r) return;
+  const el = document.getElementById('cobranza-recibo-content');
+  el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12px;padding:20px">Cargando...</div>';
+
+  if(!cobranzaRecibiendoQrDataUrl){
+    try{ cobranzaRecibiendoQrDataUrl = await cobranzaGenerarQR('LADIAR|'+r.numero_recibo+'|'+r.hash_verificacion); }
+    catch(e){ console.error('[cobranzaRenderRecibo] QR', e); }
+  }
+
+  const anulado = r.estado==='anulado';
+  const filasComprobantes = (r.comprobantes||[]).map(function(c){
+    return `<tr>
+      <td style="padding:4px 6px;font-size:11px;border-bottom:1px solid #f1f3f4">${c.fecha_vencimiento||'—'}</td>
+      <td style="padding:4px 6px;font-size:11px;border-bottom:1px solid #f1f3f4">${c.tipo||''} ${c.sucursal||''}-${c.numero||''}</td>
+      <td style="padding:4px 6px;font-size:11px;border-bottom:1px solid #f1f3f4;text-align:right">${money(c.saldo)}</td>
+    </tr>`;
+  }).join('');
+
+  function filaValor(label, monto, extra){
+    return `<div style="display:flex;justify-content:space-between;font-size:12px;color:#5f6368;padding:3px 0"><span>${label}${extra?(' — '+extra):''}</span><span>${money(monto)}</span></div>`;
+  }
+  let valoresHtml = '';
+  if(r.efectivo) valoresHtml += filaValor('Efectivo', r.efectivo, r.efectivo_modo==='billetes' ? 'por billete' : '');
+  (r.cheques||[]).forEach(function(c){ valoresHtml += filaValor('Cheque', c.monto, c.numero); });
+  (r.echeqs||[]).forEach(function(c){ valoresHtml += filaValor('eCheq', c.monto, c.numero); });
+  (r.transferencias||[]).forEach(function(c){ valoresHtml += filaValor('Transferencia', c.monto, c.referencia); });
+  (r.retenciones||[]).forEach(function(c){ valoresHtml += filaValor('Retención '+c.tipo, c.monto, c.numero); });
+
+  el.innerHTML = `
+    ${anulado ? '<div style="background:#fce8e6;color:#c5221f;text-align:center;font-weight:800;font-size:12.5px;padding:8px;border-radius:8px;margin-bottom:12px">🚫 RECIBO ANULADO</div>' : ''}
+    <div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:16px;text-align:center;margin-bottom:14px">
+      <div style="font-size:18px;font-weight:900;color:#0d652d;letter-spacing:1px">LADIAR</div>
+      <div style="font-size:11px;color:#9aa0a6;margin-top:2px">Recibo N° ${r.numero_recibo}</div>
+      <div style="font-size:10.5px;color:#9aa0a6">${cobranzaFmtFechaHora(r.fecha_hora)}</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-bottom:14px">
+      <div style="font-size:9.5px;color:#9aa0a6;font-weight:800;text-transform:uppercase;letter-spacing:.5px">Recibimos de</div>
+      <div style="font-size:14px;font-weight:700;color:#202124">${r.cliente_nombre||''}</div>
+      <div style="font-size:11px;color:#80868b">ID ${r.cliente_id||''}</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-bottom:14px">
+      <div style="font-size:9.5px;color:#9aa0a6;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Comprobantes</div>
+      <table style="width:100%;border-collapse:collapse">
+        <tr><th style="text-align:left;font-size:9.5px;color:#9aa0a6;padding-bottom:4px">Vence</th><th style="text-align:left;font-size:9.5px;color:#9aa0a6;padding-bottom:4px">Comprobante</th><th style="text-align:right;font-size:9.5px;color:#9aa0a6;padding-bottom:4px">Importe</th></tr>
+        ${filasComprobantes}
+      </table>
+      <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12.5px;font-weight:700"><span>Total comprobantes</span><span>${money(r.total_comprobantes)}</span></div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-bottom:14px">
+      <div style="font-size:9.5px;color:#9aa0a6;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Valores recibidos</div>
+      ${valoresHtml}
+      <div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid #f1f3f4;font-size:13px;font-weight:800;color:#0d652d"><span>Total</span><span>${money(r.total_registrado)}</span></div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:16px;text-align:center">
+      ${cobranzaRecibiendoQrDataUrl ? `<img src="${cobranzaRecibiendoQrDataUrl}" style="width:140px;height:140px">` : ''}
+      <div style="font-size:9.5px;color:#9aa0a6;margin-top:8px">Código de verificación</div>
+      <div style="font-size:12px;font-weight:800;color:#202124;letter-spacing:1px">${r.hash_verificacion||''}</div>
+      <div style="font-size:10.5px;color:#9aa0a6;margin-top:8px">${r.vendedor_nombre||''} (${r.vendedor_code||''}) · ${r.numero_lote||''}</div>
+    </div>
+  `;
+
+  document.getElementById('cobranza-recibo-btn-anular').style.display =
+    (!anulado && cobranzaLoteActual && cobranzaLoteActual.id===r.lote_id && cobranzaLoteActual.estado==='abierto') ? 'block' : 'none';
+}
+
+async function cobranzaAnularRecibo(){
+  const r = cobranzaRecibiendoActual;
+  if(!r) return;
+  if(!confirm('¿Anular el recibo '+r.numero_recibo+'? Los comprobantes que incluía vuelven a quedar disponibles para cobrar.')) return;
+  const btn = document.getElementById('cobranza-recibo-btn-anular');
+  btn.disabled = true; btn.textContent = 'Anulando...';
+  try{
+    const { db, doc, writeBatch } = window.fb;
+    const batch = writeBatch(db);
+    batch.set(doc(db,'recibos_cobranza',r.id), { estado:'anulado' }, {merge:true});
+    (r.comprobantes||[]).forEach(function(c){
+      batch.set(doc(db,'comprobantes_pendientes',c.id), { estado:'disponible', recibo_id: null }, {merge:true});
+    });
+    await batch.commit();
+    r.estado = 'anulado';
+    cobranzaRenderRecibo();
+    cobranzaCargarRecibosLote();
+  }catch(err){
+    console.error('[cobranzaAnularRecibo]', err);
+    alert('Error al anular: '+(err.message||err));
+  }finally{
+    btn.disabled=false; btn.textContent='🚫 Anular';
+  }
+}
+
+// ── Exportar / compartir el recibo en PDF (con QR) ──
+async function cobranzaConstruirReciboPDF(){
+  const r = cobranzaRecibiendoActual;
+  await ensureJsPDFAdmin();
+  const { jsPDF } = window.jspdf;
+  const docPdf = new jsPDF({unit:'mm', format:'a4'});
+  const margin = 18;
+  const pageW = docPdf.internal.pageSize.getWidth();
+  let y = margin;
+
+  docPdf.setFont('helvetica','bold'); docPdf.setFontSize(18);
+  docPdf.text('LADIAR', pageW/2, y, {align:'center'}); y+=8;
+  docPdf.setFont('helvetica','normal'); docPdf.setFontSize(10);
+  docPdf.text('Recibo N° '+r.numero_recibo, pageW/2, y, {align:'center'}); y+=5;
+  docPdf.text(cobranzaFmtFechaHora(r.fecha_hora), pageW/2, y, {align:'center'}); y+=10;
+
+  if(r.estado==='anulado'){
+    docPdf.setTextColor(200,20,20); docPdf.setFont('helvetica','bold'); docPdf.setFontSize(14);
+    docPdf.text('RECIBO ANULADO', pageW/2, y, {align:'center'}); y+=10;
+    docPdf.setTextColor(0,0,0);
+  }
+
+  docPdf.setFont('helvetica','bold'); docPdf.setFontSize(10.5);
+  docPdf.text('Recibimos de: '+(r.cliente_nombre||''), margin, y); y+=6;
+  docPdf.setFont('helvetica','normal');
+  docPdf.text('Código de cliente: '+(r.cliente_id||''), margin, y); y+=9;
+
+  docPdf.setFont('helvetica','bold'); docPdf.setFontSize(9.5);
+  docPdf.text('Vence', margin, y);
+  docPdf.text('Comprobante', margin+35, y);
+  docPdf.text('Importe', pageW-margin, y, {align:'right'});
+  y+=3;
+  docPdf.setDrawColor(200); docPdf.line(margin, y, pageW-margin, y); y+=5;
+  docPdf.setFont('helvetica','normal'); docPdf.setFontSize(9.5);
+  (r.comprobantes||[]).forEach(function(c){
+    docPdf.text(c.fecha_vencimiento||'—', margin, y);
+    docPdf.text((c.tipo||'')+' '+(c.sucursal||'')+'-'+(c.numero||''), margin+35, y);
+    docPdf.text(money(c.saldo), pageW-margin, y, {align:'right'});
+    y+=5;
+  });
+  y+=2;
+  docPdf.setFont('helvetica','bold');
+  docPdf.text('Total comprobantes: '+money(r.total_comprobantes), pageW-margin, y, {align:'right'});
+  y+=10;
+
+  docPdf.setFontSize(9.5);
+  docPdf.text('Valores recibidos', margin, y); y+=6;
+  docPdf.setFont('helvetica','normal');
+  function filaValorPdf(label, monto, extra){
+    docPdf.text(label+(extra?(' — '+extra):''), margin, y);
+    docPdf.text(money(monto), pageW-margin, y, {align:'right'});
+    y+=5;
+  }
+  if(r.efectivo) filaValorPdf('Efectivo', r.efectivo, r.efectivo_modo==='billetes'?'por billete':'');
+  (r.cheques||[]).forEach(function(c){ filaValorPdf('Cheque', c.monto, c.numero); });
+  (r.echeqs||[]).forEach(function(c){ filaValorPdf('eCheq', c.monto, c.numero); });
+  (r.transferencias||[]).forEach(function(c){ filaValorPdf('Transferencia', c.monto, c.referencia); });
+  (r.retenciones||[]).forEach(function(c){ filaValorPdf('Retención '+c.tipo, c.monto, c.numero); });
+  y+=2;
+  docPdf.setFont('helvetica','bold'); docPdf.setFontSize(11);
+  docPdf.text('TOTAL: '+money(r.total_registrado), pageW-margin, y, {align:'right'});
+  y+=14;
+
+  if(!cobranzaRecibiendoQrDataUrl){
+    try{ cobranzaRecibiendoQrDataUrl = await cobranzaGenerarQR('LADIAR|'+r.numero_recibo+'|'+r.hash_verificacion); }catch(e){}
+  }
+  if(cobranzaRecibiendoQrDataUrl){
+    docPdf.addImage(cobranzaRecibiendoQrDataUrl, 'PNG', margin, y, 30, 30);
+  }
+  docPdf.setFont('helvetica','normal'); docPdf.setFontSize(8.5);
+  docPdf.text('Código de verificación: '+(r.hash_verificacion||''), margin+35, y+8);
+  docPdf.text('Vendedor: '+(r.vendedor_nombre||'')+' ('+(r.vendedor_code||'')+')', margin+35, y+13);
+  docPdf.text('Lote: '+(r.numero_lote||''), margin+35, y+18);
+
+  return docPdf;
+}
+
+async function cobranzaCompartirRecibo(){
+  const r = cobranzaRecibiendoActual;
+  if(!r) return;
+  const btn = document.getElementById('cobranza-recibo-btn-compartir');
+  const textoOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Preparando...';
+  try{
+    const docPdf = await cobranzaConstruirReciboPDF();
+    const blob = docPdf.output('blob');
+    const fileName = 'recibo_'+r.numero_recibo+'.pdf';
+    const file = new File([blob], fileName, {type:'application/pdf'});
+
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      try{
+        await navigator.share({files:[file], title:'Recibo '+r.numero_recibo});
+      }catch(shareErr){ /* el usuario cerró el cartel de compartir sin elegir nada */ }
+    } else {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      link.click();
+      setTimeout(function(){ URL.revokeObjectURL(link.href); }, 30000);
+    }
+  }catch(err){
+    console.error('[cobranzaCompartirRecibo]', err);
+    alert('Error al generar el PDF: '+(err.message||err));
+  }finally{
+    btn.disabled=false; btn.textContent=textoOriginal;
+  }
 }
 
 function cobranzaVolverAOficina(){
@@ -3580,7 +4039,7 @@ function cobranzaTotalComprobantesSeleccionados(){
 
 function cobranzaContinuar(){
   if(!cobranzaSeleccionados.size) return;
-  cobranzaWizardState = { efectivo:'', cheques:[], echeqs:[], transferencias:[], retenciones:[] };
+  cobranzaWizardState = { efectivo:'', efectivo_modo:'total', efectivo_billetes:{}, cheques:[], echeqs:[], transferencias:[], retenciones:[] };
   document.getElementById('cobranza-wizard-cliente').textContent = (cobranzaClienteSel.n||'')+' · ID '+cobranzaClienteSel.id;
   switchTab('cobranza-wizard');
   cobranzaRenderWizard();
@@ -3652,8 +4111,25 @@ function cobranzaRenderWizard(){
       <div style="font-size:18px;font-weight:800;color:#202124">${money(totalEsperado)}</div>
     </div>
 
-    <label class="alta-lbl">Efectivo</label>
-    <input type="number" id="cwiz-efectivo" class="alta-input" placeholder="0" step="0.01" inputmode="decimal" value="${s.efectivo}">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <label class="alta-lbl" style="margin:0">Efectivo</label>
+      <div style="display:flex;gap:4px">
+        <button type="button" onclick="cobranzaSetEfectivoModo('total')" style="font-size:10.5px;padding:4px 10px;border:1.5px solid #1a73e8;border-radius:12px;background:${s.efectivo_modo==='total'?'#1a73e8':'#fff'};color:${s.efectivo_modo==='total'?'#fff':'#1a73e8'};font-weight:700;cursor:pointer">Por total</button>
+        <button type="button" onclick="cobranzaSetEfectivoModo('billetes')" style="font-size:10.5px;padding:4px 10px;border:1.5px solid #1a73e8;border-radius:12px;background:${s.efectivo_modo==='billetes'?'#1a73e8':'#fff'};color:${s.efectivo_modo==='billetes'?'#fff':'#1a73e8'};font-weight:700;cursor:pointer">Por billete</button>
+      </div>
+    </div>
+    ${s.efectivo_modo==='billetes' ? `
+      <div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:10px 12px;margin-top:6px">
+        ${DENOMINACIONES_ARS_COBRANZA.map(function(denom){ return `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f3f4">
+            <span style="font-size:12.5px;color:#202124">${money(denom)}</span>
+            <input type="number" min="0" inputmode="numeric" data-denom="${denom}" value="${s.efectivo_billetes[denom]||''}" placeholder="0" style="width:70px;text-align:right;padding:5px 8px;border:1px solid #e8eaed;border-radius:6px;font-size:12.5px">
+          </div>`; }).join('')}
+        <div style="padding-top:8px;font-size:12.5px;font-weight:700;color:#202124;display:flex;justify-content:space-between"><span>Total efectivo</span><span>${money(s.efectivo)}</span></div>
+      </div>
+    ` : `
+      <input type="number" id="cwiz-efectivo" class="alta-input" placeholder="0" step="0.01" inputmode="decimal" value="${s.efectivo}">
+    `}
 
     <div style="font-size:10.5px;color:#80868b;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Cheques</div>
     <div id="cwiz-cheques-list">${s.cheques.map(function(c,i){ return cobranzaFilaValor('cheques',i,c,'Monto cheque','N° cheque (opcional)','numero'); }).join('')}</div>
@@ -3680,8 +4156,18 @@ function cobranzaRenderWizard(){
     <button id="cobranza-wizard-generar" onclick="cobranzaGenerarRecibo()" style="width:100%;margin-top:14px;background:#0d652d;color:#fff;border:none;border-radius:8px;padding:12px;font-weight:700;font-size:13px;cursor:pointer${coincide?'':';opacity:.5'}" ${coincide?'':'disabled'}>${coincide?'Generar Recibo':'El total no coincide'}</button>
   `;
 
-  document.getElementById('cwiz-efectivo').oninput = function(){ s.efectivo = this.value; };
-  document.getElementById('cwiz-efectivo').onblur = cobranzaRenderWizard;
+  if(s.efectivo_modo==='billetes'){
+    el.querySelectorAll('[data-denom]').forEach(function(inp){
+      inp.oninput = function(){
+        s.efectivo_billetes[this.dataset.denom] = this.value;
+        s.efectivo = cobranzaCalcularTotalBilletes();
+      };
+      inp.onblur = cobranzaRenderWizard;
+    });
+  } else {
+    document.getElementById('cwiz-efectivo').oninput = function(){ s.efectivo = this.value; };
+    document.getElementById('cwiz-efectivo').onblur = cobranzaRenderWizard;
+  }
 
   el.querySelectorAll('[data-arr]').forEach(function(inp){
     if(inp.tagName==='SELECT'){
@@ -3772,7 +4258,8 @@ async function cobranzaGenerarRecibo(){
       vendedor_code: getVendorCode(), vendedor_nombre: currentVendor, zona: cobranzaLoteActual.zona,
       cliente_id: cobranzaClienteSel.id, cliente_nombre: cobranzaClienteSel.n,
       comprobantes: comprobantesSnapshot, total_comprobantes: totalEsperado,
-      efectivo: Number(s.efectivo)||0, cheques: s.cheques, echeqs: s.echeqs,
+      efectivo: Number(s.efectivo)||0, efectivo_modo: s.efectivo_modo, efectivo_billetes: s.efectivo_billetes,
+      cheques: s.cheques, echeqs: s.echeqs,
       transferencias: s.transferencias, retenciones: s.retenciones,
       total_registrado: totalRegistrado,
       estado: 'activo',
@@ -3788,15 +4275,15 @@ async function cobranzaGenerarRecibo(){
     });
     await batch.commit();
 
-    alert('✅ Recibo '+numeroRecibo+' generado por '+money(totalRegistrado)+'.\n\nCódigo de verificación: '+hash+'\n\n(La exportación en PDF con QR y el envío por mail/WhatsApp se suman en la próxima fase.)');
-
     cobranzaSeleccionados = new Set();
     cobranzaWizardState = null;
-    switchTab('cobranza');
-    document.getElementById('cobranza-paso-comprobantes').style.display='none';
-    document.getElementById('cobranza-paso-buscar').style.display='block';
+    cobranzaClienteSel = null;
     document.getElementById('cobranza-buscar').value='';
     document.getElementById('cobranza-resultados').innerHTML='';
+    document.getElementById('cobranza-paso-comprobantes').style.display='none';
+    document.getElementById('cobranza-paso-buscar').style.display='block';
+
+    await cobranzaVerRecibo(reciboRef.id);
   }catch(err){
     console.error('[cobranzaGenerarRecibo]', err);
     errEl.style.display='block';
@@ -5763,6 +6250,7 @@ function adminRenderTarjetaAlta(a, badgeColor, badgeLabel){
       ${a.observaciones ? `<div style="font-size:11.5px;color:#5f6368;margin-bottom:8px"><b>Observaciones:</b> ${a.observaciones}</div>` : ''}
       <div style="font-size:10.5px;color:#9aa0a6;margin-bottom:10px">📎 ${a.documentacion_path ? `<a href="javascript:void(0)" onclick="adminVerAdjunto('${a.documentacion_path}')" style="color:#1a73e8;text-decoration:underline;cursor:pointer">${a.documentacion_path.split('/').pop()}</a>` : 'sin adjunto'}</div>
       ${estado!=='pendiente' ? `<div style="font-size:10px;color:#9aa0a6;margin-bottom:10px">Resuelta por ${a.resuelto_por||'—'} el ${adminFmtFechaAlta(a.fecha_resolucion)}</div>` : ''}
+      ${a.codigo_erp ? `<div style="font-size:11.5px;font-weight:700;color:#188038;background:#e6f4ea;border-radius:6px;padding:6px 10px;margin-bottom:10px">🔢 Código de cliente ERP: ${a.codigo_erp}</div>` : ''}
       <div style="display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid #f1f3f4;padding-top:10px">
         ${estado==='pendiente' ? `
           <button onclick="adminResolverItem('alta','${a.id}','aprobado')" style="font-size:11px;padding:6px 12px;border:1.5px solid #188038;color:#fff;background:#188038;border-radius:6px;cursor:pointer;font-weight:700">✅ Aprobar</button>
@@ -5770,6 +6258,7 @@ function adminRenderTarjetaAlta(a, badgeColor, badgeLabel){
         ` : `
           <button onclick="adminResolverItem('alta','${a.id}','pendiente')" style="font-size:11px;padding:6px 12px;border:1px solid #dadce0;color:#5f6368;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">↺ Volver a pendiente</button>
         `}
+        ${estado==='aprobado' ? `<button onclick="adminSetCodigoErp('${a.id}')" style="font-size:11px;padding:6px 12px;border:1.5px solid #188038;color:#188038;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">🔢 ${a.codigo_erp?'Editar código ERP':'Ingresar código ERP'}</button>` : ''}
         <button onclick="adminExportAltaPDF('${a.id}')" style="font-size:11px;padding:6px 12px;border:1.5px solid #2c3e50;color:#2c3e50;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">📄 PDF</button>
         ${a.documentacion_path ? `<button onclick="adminVerAdjunto('${a.documentacion_path}')" style="font-size:11px;padding:6px 12px;border:1.5px solid #5f6368;color:#5f6368;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">📎 Ver adjunto</button>` : ''}
         ${estado==='rechazado' ? `<button onclick="adminEliminarItem('alta','${a.id}')" style="font-size:11px;padding:6px 12px;border:1.5px solid #ea4335;color:#ea4335;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">🗑 Eliminar</button>` : ''}
@@ -5852,6 +6341,24 @@ function adminRenderTarjetaBaja(a, badgeColor, badgeLabel){
         ${estado==='rechazado' ? `<button onclick="adminEliminarItem('baja','${a.id}')" style="font-size:11px;padding:6px 12px;border:1.5px solid #ea4335;color:#ea4335;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">🗑 Eliminar</button>` : ''}
       </div>
     </div>`;
+}
+
+async function adminSetCodigoErp(id){
+  const a = adminAltasCache.find(function(x){ return x.id===id && x._tipo==='alta'; });
+  if(!a) return;
+  const valor = prompt('Código de cliente generado por el ERP:', a.codigo_erp||'');
+  if(valor===null) return; // el admin canceló el cartel
+  const codigo = valor.trim();
+  if(!codigo){ alert('Ingresá un código válido.'); return; }
+  try{
+    const { db, doc, setDoc, serverTimestamp } = window.fb;
+    await setDoc(doc(db,'altas_pendientes',id), { codigo_erp: codigo, codigo_erp_fecha: serverTimestamp() }, {merge:true});
+    await adminCargarAltas();
+    adminShowToast('✅ Código ERP guardado — el vendedor va a ver el aviso al entrar.');
+  }catch(err){
+    console.error('[adminSetCodigoErp]', err);
+    alert('Error al guardar el código: '+(err.message||err));
+  }
 }
 
 async function adminResolverItem(tipo, id, nuevoEstado){
@@ -6261,7 +6768,7 @@ function lanzInfoLinea(l){
   var precio = l.precio_sin_iva!=null ? Number(l.precio_sin_iva).toFixed(2) : '—';
   var cantBulto = l.cantidad_x_bulto!=null ? l.cantidad_x_bulto : '—';
   var cantIngresada = l.cantidad_ingresada!=null ? l.cantidad_ingresada : '—';
-  var reemplaza = l.reemplaza_codigo ? l.reemplaza_codigo : 'No';
+  var reemplaza = l.reemplaza_codigo ? (l.reemplaza_codigo+(l.reemplaza_stock!=null?' (stock: '+l.reemplaza_stock+')':'')) : 'No';
   var sinTacc = l.sin_tacc==='Si' ? 'Sí' : 'No';
   return 'SKU '+(l.sku||'')+' - '+umvNombre+' - x'+cantBulto+' - '+fmtFechaCorta(l.fecha_ingreso)+' - $'+precio+' s/iva - Primer Ingreso: '+cantIngresada+' '+(l.umv||'')+' - Reemplaza: '+reemplaza+' - Sin TACC: '+sinTacc;
 }
@@ -6275,6 +6782,12 @@ function lanzInitForm(){
     sel.appendChild(op);
   });
   lanzFormInicializado = true;
+}
+
+function lanzToggleReemplaza(){
+  var si = document.getElementById('lanz-reemplaza-si-no').value==='Si';
+  document.getElementById('lanz-reemplaza-box').style.display = si ? 'block' : 'none';
+  document.getElementById('lanz-reemplaza-stock-box').style.display = si ? 'block' : 'none';
 }
 
 async function lanzPublicar(){
@@ -6293,6 +6806,9 @@ async function lanzPublicar(){
   if(!val('lanz-fecha-ingreso')) faltantes.push('Fecha de ingreso');
   if(!val('lanz-cant-ingresada')) faltantes.push('Cantidad ingresada');
   if(!archivo) faltantes.push('Imagen del producto');
+  var reemplazaSi = document.getElementById('lanz-reemplaza-si-no').value==='Si';
+  if(reemplazaSi && !val('lanz-reemplaza')) faltantes.push('SKU del código reemplazado');
+  if(reemplazaSi && !val('lanz-reemplaza-stock')) faltantes.push('Stock remanente del código viejo');
 
   if(faltantes.length){
     errEl.style.display = 'block';
@@ -6314,18 +6830,22 @@ async function lanzPublicar(){
       rubro: val('lanz-rubro'), umv: val('lanz-umv'), sin_tacc: val('lanz-sin-tacc'),
       cantidad_x_bulto: parseFloat(val('lanz-cant-bulto')), precio_sin_iva: parseFloat(val('lanz-precio')),
       fecha_ingreso: val('lanz-fecha-ingreso'), cantidad_ingresada: parseFloat(val('lanz-cant-ingresada')),
-      reemplaza_codigo: val('lanz-reemplaza'), imagen_path: nombreArchivo,
+      reemplaza_codigo: reemplazaSi ? val('lanz-reemplaza') : '',
+      reemplaza_stock: reemplazaSi ? parseFloat(val('lanz-reemplaza-stock')) : null,
+      imagen_path: nombreArchivo,
       activo: true, publicado_por: currentAdmin || '',
       fecha_publicacion: serverTimestamp()
     });
 
     // Limpiar el formulario para el próximo lanzamiento
     ['lanz-sku','lanz-producto','lanz-descripcion','lanz-umv','lanz-cant-bulto','lanz-precio',
-     'lanz-fecha-ingreso','lanz-cant-ingresada','lanz-reemplaza'].forEach(function(id){
+     'lanz-fecha-ingreso','lanz-cant-ingresada','lanz-reemplaza','lanz-reemplaza-stock'].forEach(function(id){
       document.getElementById(id).value = '';
     });
     document.getElementById('lanz-rubro').value = '';
     document.getElementById('lanz-sin-tacc').value = 'No';
+    document.getElementById('lanz-reemplaza-si-no').value = 'No';
+    lanzToggleReemplaza();
     document.getElementById('lanz-imagen').value = '';
 
     alert('✅ Lanzamiento publicado. Ya aparece en el catálogo de los vendedores.');
@@ -7931,8 +8451,19 @@ function supRenderHelados(data){
             <input type="number" id="lanz-cant-ingresada" class="alta-input">
           </div>
           <div>
-            <label class="alta-lbl">Reemplaza código (opcional)</label>
+            <label class="alta-lbl">¿Reemplaza a otro código? *</label>
+            <select id="lanz-reemplaza-si-no" class="alta-input" onchange="lanzToggleReemplaza()">
+              <option value="No">No</option>
+              <option value="Si">Sí</option>
+            </select>
+          </div>
+          <div id="lanz-reemplaza-box" style="display:none">
+            <label class="alta-lbl">SKU del código reemplazado</label>
             <input type="text" id="lanz-reemplaza" class="alta-input">
+          </div>
+          <div id="lanz-reemplaza-stock-box" style="display:none">
+            <label class="alta-lbl">Stock remanente del código viejo</label>
+            <input type="number" id="lanz-reemplaza-stock" class="alta-input" placeholder="Unidades que todavía quedan">
           </div>
           <div>
             <label class="alta-lbl">Imagen del producto *</label>
