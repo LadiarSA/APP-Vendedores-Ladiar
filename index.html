@@ -415,6 +415,56 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
       </div>
     </div>
 
+    <div onclick="switchTab('oficina-abm')" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
+      <span style="font-size:22px">🗃️</span>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:700;color:#202124">ABM Clientes</div>
+        <div style="font-size:11px;color:#80868b">Alta, Modificación o Baja de un cliente</div>
+      </div>
+      <span style="color:#c4c7c5;font-size:16px">›</span>
+    </div>
+
+    <div onclick="switchTab('oficina-reclamos')" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
+      <span style="font-size:22px">⚠️</span>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:700;color:#202124">Reclamos</div>
+        <div style="font-size:11px;color:#80868b">Cargar o hacer seguimiento de reclamos</div>
+      </div>
+      <span style="color:#c4c7c5;font-size:16px">›</span>
+    </div>
+
+    <div onclick="abrirCatalogo()" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
+      <span style="font-size:22px">📖</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#202124">Catálogo Lanzamientos</div>
+        <div style="font-size:11px;color:#80868b">Novedades y productos nuevos</div>
+      </div>
+    </div>
+
+    <a href="https://gestiondigital.itc-cloud.com.ar/Account/Login?returnUrl=%2FUser" target="_blank" rel="noopener" style="text-decoration:none">
+      <div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
+        <span style="font-size:22px">💵</span>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:#202124">Recibos de Sueldo</div>
+          <div style="font-size:11px;color:#80868b">Se abre en una pestaña nueva ↗</div>
+        </div>
+      </div>
+    </a>
+
+  </div>
+</div>
+
+<!-- Submenú: ABM Clientes -->
+<div class="panel" id="panel-oficina-abm" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
+  <div style="background:#5f6368;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+    <span onclick="switchTab('oficina')" style="color:#fff;font-size:20px;cursor:pointer;padding:2px 6px">←</span>
+    <div>
+      <div style="color:#fff;font-weight:800;font-size:14px">🗃️ ABM Clientes</div>
+      <div style="color:#dadce0;font-size:11px">Alta, Modificación o Baja</div>
+    </div>
+  </div>
+  <div style="flex:1;min-height:0;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px">
+
     <div onclick="abrirAltaCliente()" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
       <span style="font-size:22px">➕</span>
       <div>
@@ -439,10 +489,24 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- Submenú: Reclamos -->
+<div class="panel" id="panel-oficina-reclamos" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
+  <div style="background:#5f6368;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+    <span onclick="switchTab('oficina')" style="color:#fff;font-size:20px;cursor:pointer;padding:2px 6px">←</span>
+    <div>
+      <div style="color:#fff;font-weight:800;font-size:14px">⚠️ Reclamos</div>
+      <div style="color:#dadce0;font-size:11px">Cargar o hacer seguimiento</div>
+    </div>
+  </div>
+  <div style="flex:1;min-height:0;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px">
+
     <div onclick="reclamoAbrir()" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
       <span style="font-size:22px">⚠️</span>
       <div>
-        <div style="font-size:13px;font-weight:700;color:#202124">Alta Reclamo Cliente</div>
+        <div style="font-size:13px;font-weight:700;color:#202124">Alta Reclamo</div>
         <div style="font-size:11px;color:#80868b">Cargar un reclamo de un cliente</div>
       </div>
     </div>
@@ -450,28 +514,10 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
     <div onclick="reclamoAbrirLista()" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
       <span style="font-size:22px">📋</span>
       <div>
-        <div style="font-size:13px;font-weight:700;color:#202124">Mis Reclamos</div>
+        <div style="font-size:13px;font-weight:700;color:#202124">Seguimiento Reclamos</div>
         <div style="font-size:11px;color:#80868b">Ver estado y responder</div>
       </div>
     </div>
-
-    <div onclick="abrirCatalogo()" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
-      <span style="font-size:22px">📖</span>
-      <div>
-        <div style="font-size:13px;font-weight:700;color:#202124">Catálogo Lanzamientos</div>
-        <div style="font-size:11px;color:#80868b">Novedades y productos nuevos</div>
-      </div>
-    </div>
-
-    <a href="https://gestiondigital.itc-cloud.com.ar/Account/Login?returnUrl=%2FUser" target="_blank" rel="noopener" style="text-decoration:none">
-      <div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
-        <span style="font-size:22px">💵</span>
-        <div>
-          <div style="font-size:13px;font-weight:700;color:#202124">Recibos de Sueldo</div>
-          <div style="font-size:11px;color:#80868b">Se abre en una pestaña nueva ↗</div>
-        </div>
-      </div>
-    </a>
 
   </div>
 </div>
@@ -479,7 +525,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
 <!-- ALTA NUEVO CLIENTE -->
 <div class="panel" id="panel-alta-cliente" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
   <div style="background:#188038;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0">
-    <span onclick="switchTab('oficina')" style="color:#fff;font-size:20px;cursor:pointer;padding:2px 6px">←</span>
+    <span onclick="switchTab('oficina-abm')" style="color:#fff;font-size:20px;cursor:pointer;padding:2px 6px">←</span>
     <div>
       <div style="color:#fff;font-weight:800;font-size:14px">➕ Alta Nuevo Cliente</div>
       <div style="color:#c8e6c9;font-size:11px">Completá los datos del punto de venta</div>
@@ -879,8 +925,8 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
 <!-- Mis Reclamos (lista del vendedor) -->
 <div class="panel" id="panel-mis-reclamos" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
   <div style="background:#f9ab00;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0">
-    <span onclick="switchTab('oficina')" style="color:#fff;font-size:20px;cursor:pointer">←</span>
-    <div style="color:#fff;font-weight:800;font-size:14px">📋 Mis Reclamos</div>
+    <span onclick="switchTab('oficina-reclamos')" style="color:#fff;font-size:20px;cursor:pointer">←</span>
+    <div style="color:#fff;font-weight:800;font-size:14px">📋 Seguimiento de Reclamos</div>
   </div>
   <div style="flex:1;overflow-y:auto;padding:16px" id="mis-reclamos-content"></div>
 </div>
@@ -1039,6 +1085,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
     <div style="overflow-y:auto;flex:1;padding:16px" id="reclamo-hilo-info"></div>
     <div style="border-top:1px solid #f1f3f4;padding:12px 16px;flex-shrink:0;background:#fafafa">
       <textarea id="reclamo-hilo-mensaje" class="alta-input" rows="2" placeholder="Escribir un mensaje..." style="resize:vertical;margin-bottom:8px"></textarea>
+      <input type="file" id="reclamo-hilo-adjunto" accept="image/*,application/pdf" style="width:100%;font-size:11.5px;margin-bottom:8px">
       <button onclick="reclamoEnviarMensaje()" style="width:100%;padding:10px;border:none;background:#2c3e50;color:#fff;border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer">Enviar mensaje</button>
       <div id="reclamo-hilo-admin-controles" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid #e8eaed"></div>
     </div>
@@ -2171,7 +2218,7 @@ function modcliVolver(){
   document.getElementById('modcli-paso-categoria').style.display='none';
   document.getElementById('modcli-paso-form').style.display='none';
   document.getElementById('modcli-paso-buscar').style.display='block';
-  switchTab('oficina');
+  switchTab('oficina-abm');
 }
 
 function modcliElegirCategoria(cat){
@@ -2598,7 +2645,7 @@ function bajaVolver(){
   bajaTogglePosibilidad();
   document.getElementById('baja-paso-form').style.display='none';
   document.getElementById('baja-paso-buscar').style.display='block';
-  switchTab('oficina');
+  switchTab('oficina-abm');
 }
 
 function bajaActualizarCamposMotivo(){
@@ -2890,7 +2937,7 @@ function reclamoVolver(){
   document.getElementById('reclamo-fotos').value='';
   document.getElementById('reclamo-paso-form').style.display='none';
   document.getElementById('reclamo-paso-buscar').style.display='block';
-  switchTab('oficina');
+  switchTab('oficina-reclamos');
 }
 
 function reclamoBuildEmailHtml(data){
@@ -3091,6 +3138,7 @@ function reclamoRenderHilo(){
       html += '<div style="background:'+(esAdminMsg?'#e8f0fe':'#f8f9fa')+';border-radius:8px;padding:8px 10px;margin-bottom:6px">'
         +'<div style="font-size:10.5px;font-weight:700;color:'+(esAdminMsg?'#1a73e8':'#5f6368')+'">'+(m.autor||(esAdminMsg?'Administración':'Vendedor'))+' · '+fechaCorta(m.fecha)+'</div>'
         +'<div style="font-size:12px;color:#202124;margin-top:2px">'+m.texto+'</div>'
+        + (m.adjunto ? '<div style="margin-top:4px"><a href="javascript:void(0)" onclick="adminVerAdjunto(\''+m.adjunto.replace(/'/g,"\\'")+'\')" style="font-size:11px;color:#1a73e8;text-decoration:underline;cursor:pointer">📎 Ver adjunto</a></div>' : '')
         +'</div>';
     });
   }
@@ -3134,18 +3182,30 @@ function reclamoCerrarHilo(){
   reclamoHiloActual = null;
 }
 
+async function reclamoSubirAdjuntoHilo(){
+  const archivo = document.getElementById('reclamo-hilo-adjunto').files[0];
+  if(!archivo) return '';
+  const { storage, ref, uploadBytes } = window.fb;
+  const path = 'reclamos_hilo_adjuntos/'+Date.now()+'_'+archivo.name;
+  await uploadBytes(ref(storage, path), archivo);
+  return path;
+}
+
 async function reclamoEnviarMensaje(){
   const texto = (document.getElementById('reclamo-hilo-mensaje').value||'').trim();
-  if(!texto){ alert('Escribí un mensaje antes de enviar.'); return; }
+  const archivo = document.getElementById('reclamo-hilo-adjunto').files[0];
+  if(!texto && !archivo){ alert('Escribí un mensaje o adjuntá un archivo antes de enviar.'); return; }
   const r = reclamoHiloActual;
   if(!r) return;
   const esAdminMsg = reclamoHiloEsAdmin;
-  const msg = { rol: esAdminMsg?'admin':'vendedor', autor: esAdminMsg?(currentAdmin||'Admin'):currentVendor, texto: texto, fecha: new Date().toISOString() };
   try{
+    const adjunto = await reclamoSubirAdjuntoHilo();
+    const msg = { rol: esAdminMsg?'admin':'vendedor', autor: esAdminMsg?(currentAdmin||'Admin'):currentVendor, texto: texto || '(sin comentario, ver adjunto)', fecha: new Date().toISOString(), adjunto };
     const { db, doc, setDoc, arrayUnion, collection, addDoc } = window.fb;
     await setDoc(doc(db,'reclamos_pendientes',r.id), { hilo: arrayUnion(msg) }, {merge:true});
     r.hilo = (r.hilo||[]).concat([msg]);
     document.getElementById('reclamo-hilo-mensaje').value='';
+    document.getElementById('reclamo-hilo-adjunto').value='';
     reclamoRenderHilo();
 
     if(!esAdminMsg){
@@ -3153,7 +3213,7 @@ async function reclamoEnviarMensaje(){
         const destinatarios = ALTAS_NOTIFY_EMAILS.concat(RECLAMO_SECTOR_MAILS[r.sector]||[]);
         await addDoc(collection(db,'mail'), {
           to: destinatarios,
-          message: { subject: '💬 Nueva réplica en reclamo '+r.codigo_reclamo, html: '<p>El vendedor '+(r.vendedor_nombre||'')+' respondió en el reclamo '+r.codigo_reclamo+':</p><p>'+texto+'</p>' }
+          message: { subject: '💬 Nueva réplica en reclamo '+r.codigo_reclamo, html: '<p>El vendedor '+(r.vendedor_nombre||'')+' respondió en el reclamo '+r.codigo_reclamo+':</p><p>'+texto+'</p>'+(adjunto?'<p>(Incluye un archivo adjunto)</p>':'') }
         });
       }catch(mailErr){ console.error('[reclamoEnviarMensaje] mail', mailErr); }
       await setDoc(doc(db,'reclamos_vistas',r.id), { mensajes_vistos: r.hilo.length }, {merge:true});
@@ -3178,14 +3238,16 @@ async function reclamoAdminResolver(nuevoEstado){
   if(!confirm('¿Confirmás '+(nuevoEstado==='aprobado'?'aprobar':'rechazar')+' este reclamo?')) return;
 
   try{
+    const adjunto = await reclamoSubirAdjuntoHilo();
     const { db, doc, setDoc, serverTimestamp, arrayUnion } = window.fb;
-    const msg = { rol:'admin', autor: currentAdmin||'Admin', texto: mensajeTexto || '(Resuelto sin comentario adicional)', fecha: new Date().toISOString() };
+    const msg = { rol:'admin', autor: currentAdmin||'Admin', texto: mensajeTexto || '(Resuelto sin comentario adicional)', fecha: new Date().toISOString(), adjunto };
     await setDoc(doc(db,'reclamos_pendientes',r.id), {
       estado: nuevoEstado, resolucion, resolucion_otro: resolucion==='OTRO'?resolucionOtro:'',
       resuelto_por: currentAdmin||'', fecha_resolucion: serverTimestamp(),
       hilo: arrayUnion(msg)
     }, {merge:true});
     document.getElementById('reclamo-hilo-mensaje').value='';
+    document.getElementById('reclamo-hilo-adjunto').value='';
     await reclamoAbrirHilo(r.id, true);
     if(typeof reclamoCargarReclamosAdmin === 'function') await reclamoCargarReclamosAdmin();
   }catch(err){

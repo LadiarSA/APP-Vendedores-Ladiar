@@ -189,6 +189,21 @@
     <button class="secondary" id="dl-pa" style="display:none" onclick="subirArchivoStorage('venta_pa', window._paOut, 'status-pa')">☁️ Subir a Firebase</button>
   </div>
 
+  <!-- 6. CUENTA CORRIENTE (COBRANZAS) → colección "comprobantes_pendientes" en Firestore -->
+  <div class="card">
+    <h2>💵 Cuenta Corriente (Cobranzas) <span class="badge">diaria</span></h2>
+    <p class="desc">Cruza el Excel de Cta.Cte con el maestro de clientes y actualiza los comprobantes disponibles para cobrar. Los comprobantes que ya están en un lote abierto (reservados o cobrados) NO se tocan, aunque el Excel de hoy diga otra cosa — recién se vuelven a sincronizar cuando se cierra ese lote y se rinde en el ERP.</p>
+    <div class="row">
+      <div class="field">
+        <label>Archivo Cta.Cte (.csv, .xls, .xlsx)</label>
+        <input type="file" id="f-ctacte" accept=".csv,.xls,.xlsx">
+      </div>
+      <button onclick="procesarCtaCte()">Procesar</button>
+    </div>
+    <div id="status-ctacte" class="status"></div>
+    <button class="secondary" id="dl-ctacte" style="display:none" onclick="subirCtaCteFirestore()">☁️ Subir a Firebase</button>
+  </div>
+
 </main>
 
 <script>
@@ -924,6 +939,156 @@ async function procesarPA(){
   }catch(err){
     console.error(err);
     showStatus('status-pa','err','Error: '+err.message);
+  }
+}
+
+// ══════════════════════════════════════════════
+// 6. CUENTA CORRIENTE (COBRANZAS)
+// ══════════════════════════════════════════════
+
+// Arma un id de documento estable y legible a partir del comprobante
+// (ej. "FA-3-578372"), para poder pisar/actualizar siempre el MISMO doc
+// en vez de duplicar filas en cada sincronización.
+function idComprobante(tipo, sucursal, numero){
+  return (tipo+'-'+sucursal+'-'+numero).replace(/\s+/g,'').toUpperCase();
+}
+
+// Separa "5001 DILUBCO S R L (SHELL)-7 Días" en código/nombre/condición.
+// El código es el número al principio; la condición es todo lo que queda
+// después del ÚLTIMO guion (más robusto que el primero, por si el nombre
+// del cliente tuviera guiones); el nombre es lo que queda en el medio.
+function parseClienteCondicion(texto){
+  texto = String(texto||'').trim();
+  var mCodigo = texto.match(/^(\d+)\s+(.*)$/);
+  if(!mCodigo) return {codigo:'', nombre:texto, condicion:''};
+  var codigo = mCodigo[1];
+  var resto = mCodigo[2];
+  var idx = resto.lastIndexOf('-');
+  if(idx===-1) return {codigo:codigo, nombre:resto.trim(), condicion:''};
+  return {
+    codigo: codigo,
+    nombre: resto.slice(0, idx).trim(),
+    condicion: resto.slice(idx+1).trim()
+  };
+}
+
+async function procesarCtaCte(){
+  var file = document.getElementById('f-ctacte').files[0];
+  document.getElementById('dl-ctacte').style.display = 'none';
+  if(!file){ showStatus('status-ctacte','err','Subí el archivo de Cta.Cte.'); return; }
+  showStatus('status-ctacte','info','Procesando...');
+
+  try{
+    var t = await smartReadTabular(file);
+    var h = t.header;
+
+    // Si en algún momento el Power BI exporta el código/nombre/condición ya
+    // separados en columnas propias, los usamos directo (más confiable);
+    // si no, caemos al parseo del texto combinado "Cliente - Condición".
+    var iCodigoCol = ci(h,'código cliente'); if(iCodigoCol<0) iCodigoCol = ci(h,'codigo cliente');
+    var iNombreCol = ci(h,'nombre cliente');
+    var iCondicionCol = ci(h,'condición de venta'); if(iCondicionCol<0) iCondicionCol = ci(h,'condicion de venta');
+    var iClienteCondicion = ci(h,'cliente - condición'); if(iClienteCondicion<0) iClienteCondicion = ci(h,'cliente - condicion');
+
+    var iDocumento = ci(h,'documento vencimiento.documento'); if(iDocumento<0) iDocumento = ci(h,'documento');
+    var iDeudaTotal = ci(h,'deuda total');
+    var iDeudaVencida = ci(h,'deuda vencida');
+    var iSaldo = ci(h,'saldo');
+    var iVencimiento = ci(h,'última fecha: vencimiento cuota'); if(iVencimiento<0) iVencimiento = ci(h,'ultima fecha vencimiento cuota');
+    var iUltPago = ci(h,'ultima fecha pago'); if(iUltPago<0) iUltPago = ci(h,'última fecha pago');
+    var iDiasVenc = ci(h,'días vencidos'); if(iDiasVenc<0) iDiasVenc = ci(h,'dias vencidos');
+    var iVendedor = ci(h,'vendedor');
+
+    var out = [];
+    var sinDocumento = 0, sinCliente = 0;
+    t.rows.forEach(function(c){
+      var codigo, nombre, condicion;
+      if(iCodigoCol>=0 && iNombreCol>=0){
+        codigo = String(c[iCodigoCol]||'').trim();
+        nombre = String(c[iNombreCol]||'').trim();
+        condicion = iCondicionCol>=0 ? String(c[iCondicionCol]||'').trim() : '';
+      } else {
+        var p = parseClienteCondicion(c[iClienteCondicion]);
+        codigo = p.codigo; nombre = p.nombre; condicion = p.condicion;
+      }
+      if(!codigo){ sinCliente++; return; }
+
+      var docTexto = String(c[iDocumento]||'').trim();
+      var partesDoc = docTexto.split('-').map(function(x){ return x.trim(); });
+      if(partesDoc.length<3){ sinDocumento++; return; }
+      var tipo = partesDoc[0], sucursal = partesDoc[1], numero = partesDoc.slice(2).join('-');
+
+      out.push({
+        id: idComprobante(tipo, sucursal, numero),
+        cliente_id: codigo, cliente_nombre: nombre, condicion_venta: condicion,
+        tipo: tipo, sucursal: sucursal, numero: numero,
+        deuda_total: pm(c[iDeudaTotal]), deuda_vencida: pm(c[iDeudaVencida]), saldo: pm(c[iSaldo]),
+        fecha_vencimiento: String(c[iVencimiento]||'').slice(0,10),
+        ultima_fecha_pago: String(c[iUltPago]||'').slice(0,10),
+        dias_vencidos: parseInt(c[iDiasVenc])||0,
+        vendedor_code: String(c[iVendedor]||'').trim()
+      });
+    });
+
+    window._ctaCteOut = out;
+    var msg = '✓ '+out.length+' comprobantes de '+new Set(out.map(function(r){return r.cliente_id;})).size+' clientes. Tocá "Subir a Firebase".';
+    if(sinDocumento) msg += '\n⚠️ '+sinDocumento+' fila(s) sin un N° de documento reconocible (omitidas).';
+    if(sinCliente) msg += '\n⚠️ '+sinCliente+' fila(s) sin código de cliente reconocible (omitidas).';
+    showStatus('status-ctacte','ok',msg);
+    document.getElementById('dl-ctacte').style.display = 'inline-block';
+  }catch(err){
+    console.error(err);
+    showStatus('status-ctacte','err','Error: '+err.message);
+  }
+}
+
+// Sincroniza "comprobantes_pendientes" con lo que trajo el Excel de hoy, SIN
+// tocar los comprobantes que ya están reservados (en un lote abierto) o
+// cobrados (en un lote ya cerrado, pendiente de que se refleje en el ERP) —
+// esos se dejan intactos hasta que se cierre/rinda ese lote.
+async function subirCtaCteFirestore(){
+  if(!window._ctaCteOut){ showStatus('status-ctacte','err','Primero procesá el archivo.'); return; }
+  showStatus('status-ctacte','info','Sincronizando con Firestore...');
+  try{
+    const { db, collection, getDocs, doc, setDoc, deleteDoc, writeBatch } = window.fb;
+
+    const snap = await getDocs(collection(db,'comprobantes_pendientes'));
+    const protegidos = new Set(); // reservados o cobrados: no se tocan
+    const existentesDisponibles = new Set(); // disponibles: se actualizan o se borran si ya no vienen
+    snap.forEach(function(d){
+      const data = d.data();
+      if(data.estado==='reservado' || data.estado==='cobrado') protegidos.add(d.id);
+      else existentesDisponibles.add(d.id);
+    });
+
+    const nuevos = window._ctaCteOut.filter(function(r){ return !protegidos.has(r.id); });
+    const idsNuevos = new Set(nuevos.map(function(r){ return r.id; }));
+
+    // Disponibles que ya no vienen en el Excel de hoy (se cobraron/ajustaron
+    // por fuera de la app, o el documento ya no es válido): se borran.
+    const aBorrar = [...existentesDisponibles].filter(function(id){ return !idsNuevos.has(id); });
+
+    const LOTE = 400;
+    for(let i=0;i<nuevos.length;i+=LOTE){
+      const batch = writeBatch(db);
+      nuevos.slice(i,i+LOTE).forEach(function(r){
+        batch.set(doc(db,'comprobantes_pendientes',r.id), Object.assign({estado:'disponible'}, r), {merge:true});
+      });
+      await batch.commit();
+    }
+    for(let i=0;i<aBorrar.length;i+=LOTE){
+      const batch = writeBatch(db);
+      aBorrar.slice(i,i+LOTE).forEach(function(id){ batch.delete(doc(db,'comprobantes_pendientes',id)); });
+      await batch.commit();
+    }
+
+    showStatus('status-ctacte','ok',
+      '✓ Sincronizado: '+nuevos.length+' comprobantes disponibles actualizados, '
+      +protegidos.size+' en lotes abiertos/cobrados (sin tocar), '
+      +aBorrar.length+' ya no vigentes (borrados).');
+  }catch(err){
+    console.error(err);
+    showStatus('status-ctacte','err','Error al sincronizar: '+err.message);
   }
 }
 </script>
