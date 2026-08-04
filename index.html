@@ -433,7 +433,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
       <span style="color:#c4c7c5;font-size:16px">›</span>
     </div>
 
-    <div onclick="cobranzaAbrir()" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
+    <div onclick="switchTab('oficina-cobranzas')" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
       <span style="font-size:22px">💵</span>
       <div style="flex:1">
         <div style="font-size:13px;font-weight:700;color:#202124">Mis Cobranzas</div>
@@ -531,6 +531,36 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
   </div>
 </div>
 
+<!-- Submenú: Mis Cobranzas -->
+<div class="panel" id="panel-oficina-cobranzas" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
+  <div style="background:#5f6368;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+    <span onclick="switchTab('oficina')" style="color:#fff;font-size:20px;cursor:pointer;padding:2px 6px">←</span>
+    <div>
+      <div style="color:#fff;font-weight:800;font-size:14px">💵 Mis Cobranzas</div>
+      <div style="color:#dadce0;font-size:11px">Cobrar o hacer seguimiento</div>
+    </div>
+  </div>
+  <div style="flex:1;min-height:0;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px">
+
+    <div onclick="cobranzaAbrir()" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
+      <span style="font-size:22px">💵</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#202124">Cobrar Cliente</div>
+        <div style="font-size:11px;color:#80868b">Buscar cliente y armar un recibo</div>
+      </div>
+    </div>
+
+    <div onclick="cobranzaAbrirSeguimiento()" style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer">
+      <span style="font-size:22px">📊</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#202124">Seguimiento</div>
+        <div style="font-size:11px;color:#80868b">Lotes y recibos, cerrar lote</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <!-- Mis Cobranzas -->
 <div class="panel" id="panel-cobranza" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
   <div style="background:#0d652d;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0">
@@ -614,6 +644,31 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
 
 <!-- Contenedor oculto usado solo para generar el QR del recibo -->
 <div id="cobranza-qr-hidden" style="position:fixed;left:-9999px;top:0"></div>
+
+<!-- Mis Cobranzas — Seguimiento (lista de todos los lotes) -->
+<div class="panel" id="panel-cobranza-seguimiento" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
+  <div style="background:#0d652d;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+    <span onclick="switchTab('oficina-cobranzas')" style="color:#fff;font-size:20px;cursor:pointer;padding:2px 6px">←</span>
+    <div>
+      <div style="color:#fff;font-weight:800;font-size:14px">📊 Seguimiento de Cobranzas</div>
+      <div style="color:#d3ecdd;font-size:11px">Tus lotes, abiertos y cerrados</div>
+    </div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px" id="cobranza-seguimiento-content"></div>
+</div>
+
+<!-- Mis Cobranzas — Detalle de un lote (recibos + cerrar + resumen) -->
+<div class="panel" id="panel-cobranza-lote-detalle" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
+  <div style="background:#0d652d;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+    <span onclick="cobranzaVolverASeguimiento()" style="color:#fff;font-size:20px;cursor:pointer;padding:2px 6px">←</span>
+    <div>
+      <div style="color:#fff;font-weight:800;font-size:14px">📦 <span id="cobranza-lote-detalle-numero"></span></div>
+      <div style="color:#d3ecdd;font-size:11px" id="cobranza-lote-detalle-estado"></div>
+    </div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px" id="cobranza-lote-detalle-content"></div>
+  <div id="cobranza-lote-detalle-acciones" style="border-top:1px solid #e8eaed;padding:12px 16px;flex-shrink:0;background:#fafafa;display:none;gap:8px"></div>
+</div>
 
 <!-- ALTA NUEVO CLIENTE -->
 <div class="panel" id="panel-alta-cliente" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
@@ -3528,6 +3583,8 @@ var cobranzaClienteSel = null;
 var cobranzaComprobantesDisponibles = [];
 var cobranzaSeleccionados = new Set();
 var cobranzaWizardState = null;
+var cobranzaRecibiendoOrigen = 'cobranza';
+var cobranzaLoteViendoActual = null;
 
 function money(n){
   n = Number(n)||0;
@@ -3680,6 +3737,292 @@ function cobranzaFmtFechaHora(ts){
   return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
 }
 
+// ── VENDEDOR: Seguimiento de Cobranzas (Fase 5 — lista de lotes + cierre) ──
+async function cobranzaAbrirSeguimiento(){
+  switchTab('cobranza-seguimiento');
+  await cobranzaCargarSeguimiento();
+}
+
+async function cobranzaCargarSeguimiento(){
+  const el = document.getElementById('cobranza-seguimiento-content');
+  if(!el) return;
+  el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px">Cargando...</div>';
+  try{
+    const { db, collection, getDocs, query, where } = window.fb;
+    const code = getVendorCode();
+    const q = query(collection(db,'lotes_cobranza'), where('vendedor_code','==',code));
+    const snap = await getDocs(q);
+    const lista = [];
+    snap.forEach(function(d){ lista.push(Object.assign({id:d.id}, d.data())); });
+    lista.sort(function(a,b){
+      const ta = a.fecha_apertura && a.fecha_apertura.toMillis ? a.fecha_apertura.toMillis() : 0;
+      const tb = b.fecha_apertura && b.fecha_apertura.toMillis ? b.fecha_apertura.toMillis() : 0;
+      return tb-ta;
+    });
+    if(!lista.length){
+      el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px">Todavía no abriste ningún lote.</div>';
+      return;
+    }
+    el.innerHTML = lista.map(function(l){
+      const abierto = l.estado==='abierto';
+      const r = l.resumen || {};
+      return `<div onclick="cobranzaVerLote('${l.id}')" style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-bottom:10px;cursor:pointer">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:13px;font-weight:700;color:#202124">${l.numero_lote}</div>
+          <span style="font-size:9px;font-weight:700;color:#fff;background:${abierto?'#f9ab00':'#5f6368'};border-radius:10px;padding:2px 8px">${abierto?'ABIERTO':'CERRADO'}</span>
+        </div>
+        <div style="font-size:11px;color:#80868b;margin-top:2px">${cobranzaFmtFechaHora(l.fecha_apertura)}${!abierto?(' → '+cobranzaFmtFechaHora(l.fecha_cierre)):''}</div>
+        ${!abierto ? `<div style="font-size:12px;color:#202124;font-weight:700;margin-top:4px">${r.cantidad_recibos||0} recibo(s) · ${money(r.total_cobrado||0)}</div>` : ''}
+      </div>`;
+    }).join('');
+  }catch(err){
+    console.error('[cobranzaCargarSeguimiento]', err);
+    el.innerHTML = '<div style="text-align:center;color:#ea4335;font-size:12.5px;padding:16px">Error al cargar: '+(err.message||err)+'</div>';
+  }
+}
+
+async function cobranzaVerLote(id){
+  try{
+    const { db, doc, getDoc } = window.fb;
+    const snap = await getDoc(doc(db,'lotes_cobranza',id));
+    if(!snap.exists()){ alert('No se encontró el lote.'); return; }
+    cobranzaLoteViendoActual = Object.assign({id:snap.id}, snap.data());
+  }catch(err){
+    console.error('[cobranzaVerLote]', err);
+    alert('Error al cargar el lote: '+(err.message||err));
+    return;
+  }
+  switchTab('cobranza-lote-detalle');
+  await cobranzaRenderLoteDetalle();
+}
+
+function cobranzaVolverASeguimiento(){
+  cobranzaLoteViendoActual = null;
+  switchTab('cobranza-seguimiento');
+  cobranzaCargarSeguimiento();
+}
+
+async function cobranzaRenderLoteDetalle(){
+  const l = cobranzaLoteViendoActual;
+  if(!l) return;
+  const abierto = l.estado==='abierto';
+  document.getElementById('cobranza-lote-detalle-numero').textContent = l.numero_lote;
+  document.getElementById('cobranza-lote-detalle-estado').textContent = abierto ? 'Abierto' : ('Cerrado · '+cobranzaFmtFechaHora(l.fecha_cierre));
+
+  const el = document.getElementById('cobranza-lote-detalle-content');
+  el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px">Cargando recibos...</div>';
+
+  let recibos = [];
+  try{
+    const { db, collection, getDocs, query, where } = window.fb;
+    const q = query(collection(db,'recibos_cobranza'), where('lote_id','==',l.id));
+    const snap = await getDocs(q);
+    snap.forEach(function(d){ recibos.push(Object.assign({id:d.id}, d.data())); });
+    recibos.sort(function(a,b){
+      const ta = a.fecha_hora && a.fecha_hora.toMillis ? a.fecha_hora.toMillis() : 0;
+      const tb = b.fecha_hora && b.fecha_hora.toMillis ? b.fecha_hora.toMillis() : 0;
+      return tb-ta;
+    });
+  }catch(err){
+    console.error('[cobranzaRenderLoteDetalle]', err);
+    el.innerHTML = '<div style="text-align:center;color:#ea4335;font-size:12.5px;padding:16px">Error al cargar recibos.</div>';
+    return;
+  }
+
+  let html = '';
+  if(!abierto && l.resumen){
+    const r = l.resumen;
+    html += `<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-bottom:14px">
+      <div style="font-size:9.5px;color:#9aa0a6;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Resumen del lote</div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#5f6368;padding:2px 0"><span>Recibos activos</span><b>${r.cantidad_recibos||0}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#5f6368;padding:2px 0"><span>Clientes</span><b>${r.cantidad_clientes||0}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#5f6368;padding:2px 0"><span>Efectivo</span><b>${money(r.total_efectivo||0)}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#5f6368;padding:2px 0"><span>Cheques</span><b>${money(r.total_cheques||0)}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#5f6368;padding:2px 0"><span>eCheqs</span><b>${money(r.total_echeqs||0)}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#5f6368;padding:2px 0"><span>Transferencias</span><b>${money(r.total_transferencias||0)}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#5f6368;padding:2px 0"><span>Retenciones</span><b>${money(r.total_retenciones||0)}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:13.5px;font-weight:800;color:#0d652d;padding-top:6px;margin-top:4px;border-top:1px solid #f1f3f4"><span>Total cobrado</span><span>${money(r.total_cobrado||0)}</span></div>
+    </div>`;
+  }
+
+  html += '<div style="font-size:9.5px;font-weight:800;color:#5f6368;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Recibos</div>';
+  if(!recibos.length){
+    html += '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:10px">Este lote no tiene recibos.</div>';
+  } else {
+    recibos.forEach(function(r){
+      const anulado = r.estado==='anulado';
+      html += `<div onclick="cobranzaVerRecibo('${r.id}','lote-detalle')" style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;${anulado?'opacity:.55':''}">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:12.5px;font-weight:700;color:#202124">${r.numero_recibo}</div>
+          ${anulado ? '<span style="font-size:9px;font-weight:700;color:#fff;background:#ea4335;border-radius:10px;padding:2px 8px">ANULADO</span>' : ''}
+        </div>
+        <div style="font-size:11px;color:#80868b">${r.cliente_nombre||''} · ${money(r.total_registrado)}</div>
+      </div>`;
+    });
+  }
+  el.innerHTML = html;
+
+  const acciones = document.getElementById('cobranza-lote-detalle-acciones');
+  if(abierto){
+    acciones.style.display = 'flex';
+    acciones.innerHTML = '<button id="cobranza-btn-cerrar-lote" onclick="cobranzaCerrarLote()" style="flex:1;padding:11px;border:none;background:#0d652d;color:#fff;border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer">🔒 Cerrar lote</button>';
+  } else {
+    acciones.style.display = 'flex';
+    acciones.innerHTML = '<button id="cobranza-btn-resumen-lote" onclick="cobranzaCompartirResumenLote()" style="flex:1;padding:11px;border:none;background:#0d652d;color:#fff;border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer">📤 Resumen / PDF</button>';
+  }
+}
+
+async function cobranzaCerrarLote(){
+  const l = cobranzaLoteViendoActual;
+  if(!l || l.estado!=='abierto') return;
+  if(!confirm('¿Cerrar el lote '+l.numero_lote+'? Una vez cerrado no se pueden anular más recibos de este lote, y no vas a poder cobrar más hasta abrir uno nuevo.')) return;
+
+  const btn = document.getElementById('cobranza-btn-cerrar-lote');
+  btn.disabled = true; btn.textContent = 'Cerrando...';
+
+  try{
+    const { db, collection, getDocs, query, where, doc, setDoc, serverTimestamp } = window.fb;
+    const q = query(collection(db,'recibos_cobranza'), where('lote_id','==',l.id));
+    const snap = await getDocs(q);
+    const recibos = [];
+    snap.forEach(function(d){ recibos.push(Object.assign({id:d.id}, d.data())); });
+    const activos = recibos.filter(function(r){ return r.estado!=='anulado'; });
+
+    const clientesMap = {};
+    let totalEfectivo=0, totalCheques=0, totalEcheqs=0, totalTransferencias=0, totalRetenciones=0, totalComprobantes=0;
+    const billetes = {};
+    activos.forEach(function(r){
+      totalEfectivo += Number(r.efectivo)||0;
+      (r.cheques||[]).forEach(function(c){ totalCheques += Number(c.monto)||0; });
+      (r.echeqs||[]).forEach(function(c){ totalEcheqs += Number(c.monto)||0; });
+      (r.transferencias||[]).forEach(function(c){ totalTransferencias += Number(c.monto)||0; });
+      (r.retenciones||[]).forEach(function(c){ totalRetenciones += Number(c.monto)||0; });
+      totalComprobantes += Number(r.total_comprobantes)||0;
+      if(r.efectivo_modo==='billetes' && r.efectivo_billetes){
+        Object.entries(r.efectivo_billetes).forEach(function(e){
+          billetes[e[0]] = (Number(billetes[e[0]])||0) + (Number(e[1])||0);
+        });
+      }
+      if(!clientesMap[r.cliente_id]) clientesMap[r.cliente_id] = { cliente_id:r.cliente_id, cliente_nombre:r.cliente_nombre, total:0 };
+      clientesMap[r.cliente_id].total += Number(r.total_registrado)||0;
+    });
+    const totalCobrado = totalEfectivo+totalCheques+totalEcheqs+totalTransferencias+totalRetenciones;
+
+    const resumen = {
+      cantidad_recibos: activos.length, cantidad_clientes: Object.keys(clientesMap).length,
+      total_comprobantes: totalComprobantes, total_cobrado: totalCobrado,
+      total_efectivo: totalEfectivo, total_cheques: totalCheques, total_echeqs: totalEcheqs,
+      total_transferencias: totalTransferencias, total_retenciones: totalRetenciones,
+      billetes: billetes, clientes: Object.values(clientesMap)
+    };
+
+    await setDoc(doc(db,'lotes_cobranza',l.id), { estado:'cerrado', fecha_cierre: serverTimestamp(), resumen: resumen }, {merge:true});
+
+    cobranzaLoteViendoActual = Object.assign({}, l, { estado:'cerrado', resumen: resumen });
+    if(cobranzaLoteActual && cobranzaLoteActual.id===l.id) cobranzaLoteActual = null; // ya no hay lote abierto
+    await cobranzaRenderLoteDetalle();
+    alert('✅ Lote '+l.numero_lote+' cerrado. Total cobrado: '+money(totalCobrado)+'.\n\nDesde este mismo lote podés descargar/compartir el PDF resumen para llevar a la oficina.');
+  }catch(err){
+    console.error('[cobranzaCerrarLote]', err);
+    alert('Error al cerrar el lote: '+(err.message||err));
+    btn.disabled=false; btn.textContent='🔒 Cerrar lote';
+  }
+}
+
+async function cobranzaConstruirResumenLotePDF(){
+  const l = cobranzaLoteViendoActual;
+  const r = l.resumen || {};
+  await ensureJsPDFAdmin();
+  const { jsPDF } = window.jspdf;
+  const docPdf = new jsPDF({unit:'mm', format:'a4'});
+  const margin = 18;
+  const pageW = docPdf.internal.pageSize.getWidth();
+  const pageH = docPdf.internal.pageSize.getHeight();
+  let y = margin;
+
+  function checkPage(){ if(y > pageH - margin){ docPdf.addPage(); y = margin; } }
+
+  docPdf.setFont('helvetica','bold'); docPdf.setFontSize(18);
+  docPdf.text('LADIAR', pageW/2, y, {align:'center'}); y+=8;
+  docPdf.setFont('helvetica','normal'); docPdf.setFontSize(11);
+  docPdf.text('Resumen de Lote — '+l.numero_lote, pageW/2, y, {align:'center'}); y+=6;
+  docPdf.setFontSize(9.5);
+  docPdf.text('Vendedor: '+(l.vendedor_nombre||'')+' ('+(l.vendedor_code||'')+')', pageW/2, y, {align:'center'}); y+=5;
+  docPdf.text('Abierto: '+cobranzaFmtFechaHora(l.fecha_apertura)+'  ·  Cerrado: '+cobranzaFmtFechaHora(l.fecha_cierre), pageW/2, y, {align:'center'}); y+=12;
+
+  docPdf.setFont('helvetica','bold'); docPdf.setFontSize(10.5);
+  docPdf.text('Totales', margin, y); y+=6;
+  docPdf.setFont('helvetica','normal'); docPdf.setFontSize(9.5);
+  function fila(label, valor){ docPdf.text(label, margin, y); docPdf.text(valor, pageW-margin, y, {align:'right'}); y+=5; checkPage(); }
+  fila('Recibos activos', String(r.cantidad_recibos||0));
+  fila('Clientes', String(r.cantidad_clientes||0));
+  fila('Efectivo', money(r.total_efectivo||0));
+  fila('Cheques', money(r.total_cheques||0));
+  fila('eCheqs', money(r.total_echeqs||0));
+  fila('Transferencias', money(r.total_transferencias||0));
+  fila('Retenciones', money(r.total_retenciones||0));
+  y+=1;
+  docPdf.setFont('helvetica','bold'); docPdf.setFontSize(11);
+  docPdf.text('TOTAL COBRADO', margin, y); docPdf.text(money(r.total_cobrado||0), pageW-margin, y, {align:'right'});
+  y+=12;
+
+  if(r.billetes && Object.keys(r.billetes).length){
+    checkPage();
+    docPdf.setFont('helvetica','bold'); docPdf.setFontSize(10.5);
+    docPdf.text('Rendición de efectivo (billetes declarados)', margin, y); y+=6;
+    docPdf.setFont('helvetica','normal'); docPdf.setFontSize(9.5);
+    DENOMINACIONES_ARS_COBRANZA.forEach(function(denom){
+      const cant = r.billetes[denom];
+      if(!cant) return;
+      fila(money(denom)+' x '+cant, money(denom*cant));
+    });
+    y+=6;
+  }
+
+  checkPage();
+  docPdf.setFont('helvetica','bold'); docPdf.setFontSize(10.5);
+  docPdf.text('Clientes cobrados', margin, y); y+=6;
+  docPdf.setFont('helvetica','normal'); docPdf.setFontSize(9.5);
+  (r.clientes||[]).forEach(function(c){
+    checkPage();
+    docPdf.text(c.cliente_nombre||('ID '+c.cliente_id), margin, y);
+    docPdf.text(money(c.total), pageW-margin, y, {align:'right'});
+    y+=5;
+  });
+
+  return docPdf;
+}
+
+async function cobranzaCompartirResumenLote(){
+  const l = cobranzaLoteViendoActual;
+  if(!l) return;
+  const btn = document.getElementById('cobranza-btn-resumen-lote');
+  const textoOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Preparando...';
+  try{
+    const docPdf = await cobranzaConstruirResumenLotePDF();
+    const blob = docPdf.output('blob');
+    const fileName = 'resumen_'+l.numero_lote+'.pdf';
+    const file = new File([blob], fileName, {type:'application/pdf'});
+
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      try{ await navigator.share({files:[file], title:'Resumen '+l.numero_lote}); }
+      catch(shareErr){ /* el usuario cerró el cartel sin elegir nada */ }
+    } else {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      link.click();
+      setTimeout(function(){ URL.revokeObjectURL(link.href); }, 30000);
+    }
+  }catch(err){
+    console.error('[cobranzaCompartirResumenLote]', err);
+    alert('Error al generar el PDF: '+(err.message||err));
+  }finally{
+    btn.disabled=false; btn.textContent=textoOriginal;
+  }
+}
+
 // ── Generación de QR (lazy-load, sin dependencias pesadas) ──
 var qrcodeLibLoaded = false;
 function ensureQRCodeLib(){
@@ -3710,7 +4053,7 @@ async function cobranzaGenerarQR(texto){
 var cobranzaRecibiendoActual = null;
 var cobranzaRecibiendoQrDataUrl = null;
 
-async function cobranzaVerRecibo(id){
+async function cobranzaVerRecibo(id, origen){
   try{
     const { db, doc, getDoc } = window.fb;
     const snap = await getDoc(doc(db,'recibos_cobranza',id));
@@ -3722,6 +4065,7 @@ async function cobranzaVerRecibo(id){
     return;
   }
   cobranzaRecibiendoQrDataUrl = null;
+  cobranzaRecibiendoOrigen = origen || 'cobranza';
   document.getElementById('cobranza-recibo-numero-header').textContent = cobranzaRecibiendoActual.numero_recibo;
   switchTab('cobranza-recibo');
   await cobranzaRenderRecibo();
@@ -3730,8 +4074,13 @@ async function cobranzaVerRecibo(id){
 function cobranzaVolverDesdeRecibo(){
   cobranzaRecibiendoActual = null;
   cobranzaRecibiendoQrDataUrl = null;
-  switchTab('cobranza');
-  cobranzaCargarRecibosLote();
+  if(cobranzaRecibiendoOrigen==='lote-detalle' && cobranzaLoteViendoActual){
+    switchTab('cobranza-lote-detalle');
+    cobranzaRenderLoteDetalle();
+  } else {
+    switchTab('cobranza');
+    cobranzaCargarRecibosLote();
+  }
 }
 
 async function cobranzaRenderRecibo(){
@@ -3801,8 +4150,11 @@ async function cobranzaRenderRecibo(){
     </div>
   `;
 
+  const loteDelRecibo = (cobranzaLoteActual && cobranzaLoteActual.id===r.lote_id) ? cobranzaLoteActual
+    : (cobranzaLoteViendoActual && cobranzaLoteViendoActual.id===r.lote_id) ? cobranzaLoteViendoActual
+    : null;
   document.getElementById('cobranza-recibo-btn-anular').style.display =
-    (!anulado && cobranzaLoteActual && cobranzaLoteActual.id===r.lote_id && cobranzaLoteActual.estado==='abierto') ? 'block' : 'none';
+    (!anulado && loteDelRecibo && loteDelRecibo.estado==='abierto') ? 'block' : 'none';
 }
 
 async function cobranzaAnularRecibo(){
@@ -3821,7 +4173,12 @@ async function cobranzaAnularRecibo(){
     await batch.commit();
     r.estado = 'anulado';
     cobranzaRenderRecibo();
-    cobranzaCargarRecibosLote();
+    if(cobranzaRecibiendoOrigen==='lote-detalle'){
+      // no navega, solo refresca los datos en memoria del lote que se está viendo
+      if(cobranzaLoteViendoActual && cobranzaLoteViendoActual.id===r.lote_id){ /* se re-renderiza al volver */ }
+    } else {
+      cobranzaCargarRecibosLote();
+    }
   }catch(err){
     console.error('[cobranzaAnularRecibo]', err);
     alert('Error al anular: '+(err.message||err));
@@ -3939,7 +4296,7 @@ async function cobranzaCompartirRecibo(){
 }
 
 function cobranzaVolverAOficina(){
-  switchTab('oficina');
+  switchTab('oficina-cobranzas');
 }
 
 function cobranzaBuscarCliente(){
@@ -5789,7 +6146,7 @@ function adminPopulateFilters(){
   compVendSel.innerHTML = '<option value="">Todos</option>' + vendors.map(v=>`<option value="${v}">${v}</option>`).join('');
 }
 
-const ADMIN_TAB_GROUPS = { ruteo: ['ruta','comparativa','cambios'], operaciones: ['altas','lanzamientos','reclamos'] };
+const ADMIN_TAB_GROUPS = { ruteo: ['ruta','comparativa','cambios'], operaciones: ['altas','lanzamientos','reclamos','cobranzas'] };
 var adminMainTab = 'ruteo';
 var adminGroupLastTab = { ruteo: 'ruta', operaciones: 'altas' };
 
@@ -5816,7 +6173,7 @@ function adminSetTab(t){
   Object.keys(ADMIN_TAB_GROUPS).forEach(function(g){
     if(ADMIN_TAB_GROUPS[g].indexOf(t)!==-1) adminGroupLastTab[g] = t;
   });
-  ['ruta','comparativa','cambios','altas','lanzamientos','reclamos'].forEach(function(tt){
+  ['ruta','comparativa','cambios','altas','lanzamientos','reclamos','cobranzas'].forEach(function(tt){
     const btn=document.getElementById('admin-tab-'+tt);
     if(btn){
       btn.style.borderBottomColor = tt===t ? '#2c3e50' : 'transparent';
@@ -5831,6 +6188,7 @@ function adminSetTab(t){
   if(t==='altas'){ adminCargarAltas(); }
   if(t==='lanzamientos'){ lanzInitForm(); lanzCargarLista(); }
   if(t==='reclamos'){ reclamoCargarReclamosAdmin(); }
+  if(t==='cobranzas'){ adminInitCobranzasFiltros(); adminCargarCobranzas(); }
 }
 
 function initAdminMap(){
@@ -6514,6 +6872,155 @@ async function adminExportAltasExcel(){
 // ── ADMIN: Reclamos ──
 var reclamoAdminCache = [];
 var reclamoAdminFiltro = 'pendiente'; // 'pendiente' | 'en_revision' | 'aprobado' | 'rechazado' | 'todas'
+
+// ── ADMIN: Cobranzas (Fase 6 — solo lotes cerrados) ──
+var adminCobranzasCache = [];
+
+function adminInitCobranzasFiltros(){
+  const sel = document.getElementById('admin-cobranza-vend');
+  const vendors = [...new Set(RAW_DATA.map(r=>r.vend))].sort();
+  sel.innerHTML = '<option value="">Todos los vendedores</option>' + vendors.map(function(v){ return `<option value="${v}">${v}</option>`; }).join('');
+}
+
+function adminLimpiarFiltrosCobranzas(){
+  document.getElementById('admin-cobranza-vend').value = '';
+  document.getElementById('admin-cobranza-desde').value = '';
+  document.getElementById('admin-cobranza-hasta').value = '';
+  document.getElementById('admin-cobranza-cliente').value = '';
+  adminCargarCobranzas();
+}
+
+async function adminCargarCobranzas(){
+  const el = document.getElementById('admin-cobranza-content');
+  if(!el) return;
+  el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px">Cargando...</div>';
+  try{
+    const { db, collection, getDocs, query, where } = window.fb;
+    const snap = await getDocs(query(collection(db,'lotes_cobranza'), where('estado','==','cerrado')));
+    let lista = [];
+    snap.forEach(function(d){ lista.push(Object.assign({id:d.id}, d.data())); });
+
+    const vend = document.getElementById('admin-cobranza-vend').value;
+    const desde = document.getElementById('admin-cobranza-desde').value;
+    const hasta = document.getElementById('admin-cobranza-hasta').value;
+    const clienteQ = (document.getElementById('admin-cobranza-cliente').value||'').trim().toLowerCase();
+
+    if(vend) lista = lista.filter(function(l){ return l.vendedor_nombre===vend; });
+    if(desde){
+      const desdeMs = new Date(desde+'T00:00:00').getTime();
+      lista = lista.filter(function(l){ return l.fecha_cierre && l.fecha_cierre.toMillis && l.fecha_cierre.toMillis()>=desdeMs; });
+    }
+    if(hasta){
+      const hastaMs = new Date(hasta+'T23:59:59').getTime();
+      lista = lista.filter(function(l){ return l.fecha_cierre && l.fecha_cierre.toMillis && l.fecha_cierre.toMillis()<=hastaMs; });
+    }
+    if(clienteQ){
+      lista = lista.filter(function(l){
+        return ((l.resumen && l.resumen.clientes) || []).some(function(c){
+          return String(c.cliente_id).toLowerCase().indexOf(clienteQ)!==-1 || (c.cliente_nombre||'').toLowerCase().indexOf(clienteQ)!==-1;
+        });
+      });
+    }
+
+    lista.sort(function(a,b){
+      const ta = a.fecha_cierre && a.fecha_cierre.toMillis ? a.fecha_cierre.toMillis() : 0;
+      const tb = b.fecha_cierre && b.fecha_cierre.toMillis ? b.fecha_cierre.toMillis() : 0;
+      return tb-ta;
+    });
+
+    adminCobranzasCache = lista;
+
+    let totalGeneral=0, totalRecibos=0;
+    lista.forEach(function(l){
+      totalGeneral += (l.resumen && l.resumen.total_cobrado) || 0;
+      totalRecibos += (l.resumen && l.resumen.cantidad_recibos) || 0;
+    });
+    document.getElementById('admin-cobranza-resumen').textContent =
+      lista.length+' lote(s) cerrado(s) · '+totalRecibos+' recibo(s) · '+money(totalGeneral)+' cobrados';
+
+    if(!lista.length){
+      el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px">No hay lotes cerrados con estos filtros.</div>';
+      return;
+    }
+
+    el.innerHTML = lista.map(function(l){
+      const r = l.resumen || {};
+      return `<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:14px 16px;margin-bottom:12px;cursor:pointer" onclick="adminVerLoteCobranzaModal('${l.id}')">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-size:13.5px;font-weight:700;color:#2c3e50">${l.numero_lote}</div>
+            <div style="font-size:11px;color:#9aa0a6">${l.vendedor_nombre||''} (${l.vendedor_code||''}) · ${l.zona||''}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:14px;font-weight:800;color:#188038">${money(r.total_cobrado||0)}</div>
+            <div style="font-size:10px;color:#9aa0a6">${r.cantidad_recibos||0} recibo(s) · ${r.cantidad_clientes||0} cliente(s)</div>
+          </div>
+        </div>
+        <div style="font-size:10.5px;color:#9aa0a6;margin-top:6px">Abierto ${cobranzaFmtFechaHora(l.fecha_apertura)} · Cerrado ${cobranzaFmtFechaHora(l.fecha_cierre)}</div>
+      </div>`;
+    }).join('');
+  }catch(err){
+    console.error('[adminCargarCobranzas]', err);
+    el.innerHTML = '<div style="text-align:center;color:#ea4335;font-size:12.5px;padding:16px">Error: '+(err.message||err)+'</div>';
+  }
+}
+
+function adminVerLoteCobranzaModal(id){
+  const l = adminCobranzasCache.find(function(x){ return x.id===id; });
+  if(!l) return;
+  document.getElementById('admin-cobranza-lote-titulo').textContent = l.numero_lote+' — '+(l.vendedor_nombre||'');
+  const r = l.resumen || {};
+  let html = `<div style="font-size:12px;color:#5f6368;margin-bottom:10px">
+    Abierto: ${cobranzaFmtFechaHora(l.fecha_apertura)}<br>Cerrado: ${cobranzaFmtFechaHora(l.fecha_cierre)}
+  </div>
+  <div style="background:#f8f9fa;border-radius:8px;padding:12px;margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>Efectivo</span><b>${money(r.total_efectivo||0)}</b></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>Cheques</span><b>${money(r.total_cheques||0)}</b></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>eCheqs</span><b>${money(r.total_echeqs||0)}</b></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>Transferencias</span><b>${money(r.total_transferencias||0)}</b></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>Retenciones</span><b>${money(r.total_retenciones||0)}</b></div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800;color:#188038;padding-top:6px;margin-top:4px;border-top:1px solid #e8eaed"><span>Total</span><span>${money(r.total_cobrado||0)}</span></div>
+  </div>
+  <div style="font-size:10.5px;font-weight:800;color:#5f6368;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Clientes</div>`;
+  (r.clientes||[]).forEach(function(c){
+    html += `<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid #f1f3f4"><span>${c.cliente_nombre||('ID '+c.cliente_id)}</span><b>${money(c.total)}</b></div>`;
+  });
+  document.getElementById('admin-cobranza-lote-content').innerHTML = html;
+  document.getElementById('admin-cobranza-lote-modal').style.display = 'flex';
+}
+
+async function adminExportCobranzasExcel(){
+  if(!adminCobranzasCache.length){ alert('No hay lotes para exportar con este filtro.'); return; }
+  try{
+    await ensureSheetJSVend();
+    const header = ['Lote','Vendedor','Código vendedor','Zona','Fecha apertura','Fecha cierre',
+      'Cliente ID','Cliente Nombre','Total cliente',
+      'Total lote','Recibos del lote','Clientes del lote',
+      'Efectivo lote','Cheques lote','eCheqs lote','Transferencias lote','Retenciones lote'];
+    const aoa = [header];
+    adminCobranzasCache.forEach(function(l){
+      const r = l.resumen || {};
+      const clientes = (r.clientes && r.clientes.length) ? r.clientes : [{cliente_id:'',cliente_nombre:'(sin clientes)',total:0}];
+      clientes.forEach(function(c){
+        aoa.push([
+          l.numero_lote, l.vendedor_nombre||'', l.vendedor_code||'', l.zona||'',
+          cobranzaFmtFechaHora(l.fecha_apertura), cobranzaFmtFechaHora(l.fecha_cierre),
+          c.cliente_id||'', c.cliente_nombre||'', c.total||0,
+          r.total_cobrado||0, r.cantidad_recibos||0, r.cantidad_clientes||0,
+          r.total_efectivo||0, r.total_cheques||0, r.total_echeqs||0, r.total_transferencias||0, r.total_retenciones||0
+        ]);
+      });
+    });
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Cobranzas');
+    const ts = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+    XLSX.writeFile(wb, `cobranzas_${ts}.xlsx`);
+  }catch(err){
+    console.error('[adminExportCobranzasExcel]', err);
+    alert('Error al generar el Excel: '+(err.message||err));
+  }
+}
 
 async function reclamoCargarReclamosAdmin(){
   const el = document.getElementById('reclamo-admin-content');
@@ -8273,6 +8780,7 @@ function supRenderHelados(data){
     <button id="admin-tab-altas" onclick="adminSetTab('altas')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b;display:none">ABM CLIENTES</button>
     <button id="admin-tab-lanzamientos" onclick="adminSetTab('lanzamientos')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b;display:none">LANZAMIENTOS</button>
     <button id="admin-tab-reclamos" onclick="adminSetTab('reclamos')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b;display:none">RECLAMOS</button>
+    <button id="admin-tab-cobranzas" onclick="adminSetTab('cobranzas')" style="flex:1;padding:10px 8px;border:none;background:transparent;font-weight:700;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;color:#80868b;display:none">COBRANZAS</button>
   </div>
   <!-- RUTA panel: sidebar + map -->
   <div id="admin-panel-ruta" style="display:flex;flex:1;overflow:hidden">
@@ -8499,6 +9007,44 @@ function supRenderHelados(data){
       <button onclick="reclamoCargarReclamosAdmin()" style="font-size:11px;padding:6px 12px;border:1.5px solid #2c3e50;color:#2c3e50;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">🔄 Actualizar</button>
     </div>
     <div id="reclamo-admin-content" style="flex:1;overflow-y:auto;padding:14px 16px"></div>
+  </div>
+
+  <!-- COBRANZAS -->
+  <div id="admin-panel-cobranzas" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+    <div style="background:#f8f9fa;border-bottom:1px solid #e8eaed;padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
+      <div>
+        <label style="font-size:9.5px;color:#5f6368;font-weight:700;display:block;margin-bottom:2px">Vendedor</label>
+        <select id="admin-cobranza-vend" onchange="adminCargarCobranzas()" style="font-size:11.5px;padding:6px 8px;border:1px solid #dadce0;border-radius:6px"></select>
+      </div>
+      <div>
+        <label style="font-size:9.5px;color:#5f6368;font-weight:700;display:block;margin-bottom:2px">Desde</label>
+        <input type="date" id="admin-cobranza-desde" onchange="adminCargarCobranzas()" style="font-size:11.5px;padding:6px 8px;border:1px solid #dadce0;border-radius:6px">
+      </div>
+      <div>
+        <label style="font-size:9.5px;color:#5f6368;font-weight:700;display:block;margin-bottom:2px">Hasta</label>
+        <input type="date" id="admin-cobranza-hasta" onchange="adminCargarCobranzas()" style="font-size:11.5px;padding:6px 8px;border:1px solid #dadce0;border-radius:6px">
+      </div>
+      <div style="flex:1;min-width:140px">
+        <label style="font-size:9.5px;color:#5f6368;font-weight:700;display:block;margin-bottom:2px">Buscar cliente</label>
+        <input type="text" id="admin-cobranza-cliente" oninput="adminCargarCobranzas()" placeholder="Código o nombre" style="font-size:11.5px;padding:6px 8px;border:1px solid #dadce0;border-radius:6px;width:100%">
+      </div>
+      <button onclick="adminLimpiarFiltrosCobranzas()" style="font-size:11px;padding:6.5px 12px;border:1px solid #dadce0;color:#5f6368;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">Limpiar filtros</button>
+      <button onclick="adminExportCobranzasExcel()" style="font-size:11px;padding:6.5px 12px;border:1.5px solid #188038;color:#188038;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">⬇ Exportar Excel</button>
+      <button onclick="adminCargarCobranzas()" style="font-size:11px;padding:6.5px 12px;border:1.5px solid #2c3e50;color:#2c3e50;background:#fff;border-radius:6px;cursor:pointer;font-weight:700">🔄 Actualizar</button>
+    </div>
+    <div id="admin-cobranza-resumen" style="padding:10px 16px 0;font-size:11.5px;color:#5f6368"></div>
+    <div id="admin-cobranza-content" style="flex:1;overflow-y:auto;padding:14px 16px"></div>
+  </div>
+
+  <!-- Modal de detalle de un lote (solo lectura, desde Administración) -->
+  <div id="admin-cobranza-lote-modal" style="display:none;position:fixed;inset:0;background:#0006;z-index:3200;align-items:center;justify-content:center;padding:20px">
+    <div style="background:#fff;border-radius:14px;padding:20px;width:520px;max-width:95vw;max-height:88vh;overflow-y:auto;box-shadow:0 8px 32px #0003">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="font-size:15px;font-weight:800;color:#2c3e50" id="admin-cobranza-lote-titulo"></div>
+        <span onclick="document.getElementById('admin-cobranza-lote-modal').style.display='none'" style="cursor:pointer;font-size:20px;color:#5f6368">✕</span>
+      </div>
+      <div id="admin-cobranza-lote-content"></div>
+    </div>
   </div>
 
   <!-- ERP EXPORT MODAL (Fase 3) -->
