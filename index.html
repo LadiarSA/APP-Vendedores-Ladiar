@@ -567,6 +567,18 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
   </div>
 </div>
 
+<!-- Mis Cobranzas — Wizard de cobro (Fase 3) -->
+<div class="panel" id="panel-cobranza-wizard" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
+  <div style="background:#0d652d;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+    <span onclick="cobranzaVolverAComprobantes()" style="color:#fff;font-size:20px;cursor:pointer;padding:2px 6px">←</span>
+    <div>
+      <div style="color:#fff;font-weight:800;font-size:14px">💵 Cobro</div>
+      <div style="color:#d3ecdd;font-size:11px" id="cobranza-wizard-cliente"></div>
+    </div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px" id="cobranza-wizard-content"></div>
+</div>
+
 <!-- ALTA NUEVO CLIENTE -->
 <div class="panel" id="panel-alta-cliente" style="flex-direction:column;overflow:hidden;flex:1;min-height:0;background:#f0f2f5">
   <div style="background:#188038;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0">
@@ -3403,6 +3415,7 @@ var cobranzaLoteActual = null;
 var cobranzaClienteSel = null;
 var cobranzaComprobantesDisponibles = [];
 var cobranzaSeleccionados = new Set();
+var cobranzaWizardState = null;
 
 function money(n){
   n = Number(n)||0;
@@ -3559,11 +3572,237 @@ function cobranzaVolverBuscar(){
   cobranzaClienteSel = null;
 }
 
-function cobranzaContinuar(){
-  if(!cobranzaSeleccionados.size) return;
+function cobranzaTotalComprobantesSeleccionados(){
   let total = 0;
   cobranzaComprobantesDisponibles.forEach(function(c){ if(cobranzaSeleccionados.has(c.id)) total += Number(c.saldo)||0; });
-  alert('Seleccionaste '+cobranzaSeleccionados.size+' comprobante(s) por '+money(total)+'.\n\nLa parte de cobro (efectivo, cheques, transferencias) todavía no está construida — es la próxima fase. Por ahora esto confirma que la búsqueda y selección de comprobantes ya funciona bien.');
+  return total;
+}
+
+function cobranzaContinuar(){
+  if(!cobranzaSeleccionados.size) return;
+  cobranzaWizardState = { efectivo:'', cheques:[], echeqs:[], transferencias:[], retenciones:[] };
+  document.getElementById('cobranza-wizard-cliente').textContent = (cobranzaClienteSel.n||'')+' · ID '+cobranzaClienteSel.id;
+  switchTab('cobranza-wizard');
+  cobranzaRenderWizard();
+}
+
+function cobranzaVolverAComprobantes(){
+  cobranzaWizardState = null;
+  switchTab('cobranza');
+  document.getElementById('cobranza-paso-buscar').style.display='none';
+  document.getElementById('cobranza-paso-comprobantes').style.display='block';
+}
+
+function cobranzaTotalRegistrado(){
+  const s = cobranzaWizardState;
+  let total = Number(s.efectivo)||0;
+  s.cheques.forEach(function(c){ total += Number(c.monto)||0; });
+  s.echeqs.forEach(function(c){ total += Number(c.monto)||0; });
+  s.transferencias.forEach(function(c){ total += Number(c.monto)||0; });
+  s.retenciones.forEach(function(r){ total += Number(r.monto)||0; });
+  return total;
+}
+
+function cobranzaDentroDeTolerancia(esperado, registrado){
+  return Math.abs(esperado-registrado) < 1; // margen de $1 por redondeos
+}
+
+function cobranzaFilaValor(arr, i, c, placeholderMonto, placeholderExtra, campoExtra){
+  return `<div style="display:flex;gap:6px;margin-bottom:6px">
+    <input type="number" step="0.01" inputmode="decimal" placeholder="${placeholderMonto}" data-arr="${arr}" data-idx="${i}" data-field="monto" value="${c.monto||''}" style="flex:1" class="alta-input">
+    <input type="text" placeholder="${placeholderExtra}" data-arr="${arr}" data-idx="${i}" data-field="${campoExtra}" value="${c[campoExtra]||''}" style="flex:1" class="alta-input">
+    <span data-rm="${arr}" data-idx="${i}" style="color:#ea4335;font-size:20px;cursor:pointer;align-self:center;padding:0 4px">✕</span>
+  </div>`;
+}
+
+function cobranzaFilaRetencion(i, r){
+  return `<div style="display:flex;gap:6px;margin-bottom:6px">
+    <select data-arr="retenciones" data-idx="${i}" data-field="tipo" class="alta-input" style="flex:1">
+      <option${r.tipo==='Ganancias'?' selected':''}>Ganancias</option>
+      <option${r.tipo==='IIBB'?' selected':''}>IIBB</option>
+    </select>
+    <input type="number" step="0.01" inputmode="decimal" placeholder="Importe" data-arr="retenciones" data-idx="${i}" data-field="monto" value="${r.monto||''}" style="flex:1" class="alta-input">
+    <input type="text" placeholder="N° (opcional)" data-arr="retenciones" data-idx="${i}" data-field="numero" value="${r.numero||''}" style="flex:1" class="alta-input">
+    <span data-rm="retenciones" data-idx="${i}" style="color:#ea4335;font-size:20px;cursor:pointer;align-self:center;padding:0 4px">✕</span>
+  </div>`;
+}
+
+function cobranzaAgregarValor(arr){
+  cobranzaWizardState[arr].push({monto:''});
+  cobranzaRenderWizard();
+}
+
+function cobranzaAgregarRetencion(){
+  cobranzaWizardState.retenciones.push({tipo:'Ganancias', monto:'', numero:''});
+  cobranzaRenderWizard();
+}
+
+function cobranzaRenderWizard(){
+  const s = cobranzaWizardState;
+  if(!s) return;
+  const totalEsperado = cobranzaTotalComprobantesSeleccionados();
+  const totalRegistrado = cobranzaTotalRegistrado();
+  const diff = totalEsperado - totalRegistrado;
+  const coincide = cobranzaDentroDeTolerancia(totalEsperado, totalRegistrado);
+
+  const el = document.getElementById('cobranza-wizard-content');
+  el.innerHTML = `
+    <div style="background:#fff;border-radius:10px;border:1px solid #e8eaed;padding:12px 14px;margin-bottom:14px">
+      <div style="font-size:12px;color:#5f6368">Total a cobrar (${cobranzaSeleccionados.size} comprobante(s))</div>
+      <div style="font-size:18px;font-weight:800;color:#202124">${money(totalEsperado)}</div>
+    </div>
+
+    <label class="alta-lbl">Efectivo</label>
+    <input type="number" id="cwiz-efectivo" class="alta-input" placeholder="0" step="0.01" inputmode="decimal" value="${s.efectivo}">
+
+    <div style="font-size:10.5px;color:#80868b;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Cheques</div>
+    <div id="cwiz-cheques-list">${s.cheques.map(function(c,i){ return cobranzaFilaValor('cheques',i,c,'Monto cheque','N° cheque (opcional)','numero'); }).join('')}</div>
+    <div onclick="cobranzaAgregarValor('cheques')" style="color:#1a73e8;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px">+ Agregar cheque</div>
+
+    <div style="font-size:10.5px;color:#80868b;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:6px 0 6px">eCheqs</div>
+    <div id="cwiz-echeqs-list">${s.echeqs.map(function(c,i){ return cobranzaFilaValor('echeqs',i,c,'Monto eCheq','N° eCheq (opcional)','numero'); }).join('')}</div>
+    <div onclick="cobranzaAgregarValor('echeqs')" style="color:#1a73e8;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px">+ Agregar eCheq</div>
+
+    <div style="font-size:10.5px;color:#80868b;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:6px 0 6px">Transferencias</div>
+    <div id="cwiz-transferencias-list">${s.transferencias.map(function(c,i){ return cobranzaFilaValor('transferencias',i,c,'Monto transferencia','Referencia (opcional)','referencia'); }).join('')}</div>
+    <div onclick="cobranzaAgregarValor('transferencias')" style="color:#1a73e8;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px">+ Agregar transferencia</div>
+
+    <div style="font-size:10.5px;color:#80868b;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:6px 0 6px">Retenciones (Ganancias / IIBB)</div>
+    <div id="cwiz-retenciones-list">${s.retenciones.map(function(r,i){ return cobranzaFilaRetencion(i,r); }).join('')}</div>
+    <div onclick="cobranzaAgregarRetencion()" style="color:#1a73e8;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px">+ Agregar retención</div>
+
+    <div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-top:8px">
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;color:#5f6368"><span>Total registrado</span><b>${money(totalRegistrado)}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:4px"><span>Diferencia</span><b style="color:${coincide?'#188038':'#ea4335'}">${money(diff)}${coincide?' (coincide)':' (no coincide)'}</b></div>
+    </div>
+
+    <div id="cobranza-wizard-error" style="display:none;background:#fce8e6;color:#c5221f;border-radius:8px;padding:10px 12px;font-size:12px;margin-top:12px;white-space:pre-line"></div>
+    <button id="cobranza-wizard-generar" onclick="cobranzaGenerarRecibo()" style="width:100%;margin-top:14px;background:#0d652d;color:#fff;border:none;border-radius:8px;padding:12px;font-weight:700;font-size:13px;cursor:pointer${coincide?'':';opacity:.5'}" ${coincide?'':'disabled'}>${coincide?'Generar Recibo':'El total no coincide'}</button>
+  `;
+
+  document.getElementById('cwiz-efectivo').oninput = function(){ s.efectivo = this.value; };
+  document.getElementById('cwiz-efectivo').onblur = cobranzaRenderWizard;
+
+  el.querySelectorAll('[data-arr]').forEach(function(inp){
+    if(inp.tagName==='SELECT'){
+      inp.onchange = function(){
+        const arr=this.dataset.arr, idx=this.dataset.idx, field=this.dataset.field;
+        s[arr][idx][field] = this.value;
+        setTimeout(cobranzaRenderWizard, 0);
+      };
+    } else {
+      inp.oninput = function(){
+        const arr=this.dataset.arr, idx=this.dataset.idx, field=this.dataset.field;
+        s[arr][idx][field] = this.value;
+      };
+      inp.onblur = cobranzaRenderWizard;
+    }
+  });
+  el.querySelectorAll('[data-rm]').forEach(function(span){
+    span.onclick = function(){
+      const rm=this.dataset.rm, idx=this.dataset.idx;
+      s[rm].splice(idx,1);
+      cobranzaRenderWizard();
+    };
+  });
+}
+
+async function cobranzaCalcularHash(texto){
+  const enc = new TextEncoder().encode(texto);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  const arr = Array.from(new Uint8Array(buf));
+  return arr.map(function(b){ return b.toString(16).padStart(2,'0'); }).join('').slice(0,16).toUpperCase();
+}
+
+async function cobranzaGenerarRecibo(){
+  const errEl = document.getElementById('cobranza-wizard-error');
+  errEl.style.display='none';
+  const s = cobranzaWizardState;
+
+  const totalEsperado = cobranzaTotalComprobantesSeleccionados();
+  const totalRegistrado = cobranzaTotalRegistrado();
+  if(!cobranzaDentroDeTolerancia(totalEsperado, totalRegistrado)){
+    errEl.style.display='block'; errEl.textContent='El total registrado no coincide con el total a cobrar.';
+    return;
+  }
+  for(const arr of ['cheques','echeqs','transferencias']){
+    for(const item of s[arr]){
+      if(!item.monto || Number(item.monto)<=0){
+        errEl.style.display='block';
+        errEl.textContent='Completá el monto de todos los valores agregados (o quitalos con la ✕).';
+        return;
+      }
+    }
+  }
+  for(const r of s.retenciones){
+    if(!r.monto || Number(r.monto)<=0){
+      errEl.style.display='block';
+      errEl.textContent='Completá el importe de todas las retenciones agregadas.';
+      return;
+    }
+  }
+
+  const btn = document.getElementById('cobranza-wizard-generar');
+  btn.disabled = true; btn.textContent = 'Generando...';
+
+  try{
+    const { db, doc, runTransaction, collection, writeBatch, serverTimestamp } = window.fb;
+
+    const contadorRef = doc(db,'contadores','recibos_cobranza');
+    const numero = await runTransaction(db, async (tx)=>{
+      const snap = await tx.get(contadorRef);
+      const actual = snap.exists() ? (snap.data().ultimo||0) : 0;
+      const siguiente = actual+1;
+      tx.set(contadorRef, { ultimo: siguiente }, {merge:true});
+      return siguiente;
+    });
+    const numeroRecibo = '00003-'+String(numero).padStart(7,'0');
+
+    const comprobantesSnapshot = cobranzaComprobantesDisponibles
+      .filter(function(c){ return cobranzaSeleccionados.has(c.id); })
+      .map(function(c){ return {id:c.id, tipo:c.tipo, sucursal:c.sucursal, numero:c.numero, saldo:c.saldo, fecha_vencimiento:c.fecha_vencimiento}; });
+
+    const fechaHoraIso = new Date().toISOString();
+    const cadenaFirma = [numeroRecibo, getVendorCode(), cobranzaClienteSel.id, totalRegistrado.toFixed(2), fechaHoraIso].join('|');
+    const hash = await cobranzaCalcularHash(cadenaFirma);
+
+    const reciboData = {
+      numero_recibo: numeroRecibo,
+      lote_id: cobranzaLoteActual.id, numero_lote: cobranzaLoteActual.numero_lote,
+      vendedor_code: getVendorCode(), vendedor_nombre: currentVendor, zona: cobranzaLoteActual.zona,
+      cliente_id: cobranzaClienteSel.id, cliente_nombre: cobranzaClienteSel.n,
+      comprobantes: comprobantesSnapshot, total_comprobantes: totalEsperado,
+      efectivo: Number(s.efectivo)||0, cheques: s.cheques, echeqs: s.echeqs,
+      transferencias: s.transferencias, retenciones: s.retenciones,
+      total_registrado: totalRegistrado,
+      estado: 'activo',
+      fecha_hora: serverTimestamp(), fecha_hora_iso: fechaHoraIso,
+      hash_verificacion: hash
+    };
+
+    const reciboRef = doc(collection(db,'recibos_cobranza'));
+    const batch = writeBatch(db);
+    batch.set(reciboRef, reciboData);
+    comprobantesSnapshot.forEach(function(c){
+      batch.set(doc(db,'comprobantes_pendientes',c.id), { estado:'reservado', recibo_id: reciboRef.id }, {merge:true});
+    });
+    await batch.commit();
+
+    alert('✅ Recibo '+numeroRecibo+' generado por '+money(totalRegistrado)+'.\n\nCódigo de verificación: '+hash+'\n\n(La exportación en PDF con QR y el envío por mail/WhatsApp se suman en la próxima fase.)');
+
+    cobranzaSeleccionados = new Set();
+    cobranzaWizardState = null;
+    switchTab('cobranza');
+    document.getElementById('cobranza-paso-comprobantes').style.display='none';
+    document.getElementById('cobranza-paso-buscar').style.display='block';
+    document.getElementById('cobranza-buscar').value='';
+    document.getElementById('cobranza-resultados').innerHTML='';
+  }catch(err){
+    console.error('[cobranzaGenerarRecibo]', err);
+    errEl.style.display='block';
+    errEl.textContent = 'Error al generar el recibo: '+(err.message||err);
+    btn.disabled=false; btn.textContent='Generar Recibo';
+  }
 }
 
 // ── VENDEDOR: Buscador y Ficha de Cliente (pestaña Clientes) ──
