@@ -3681,7 +3681,8 @@ async function cobranzaAbrirLoteManual(){
 
 async function cobranzaCrearLote(){
   const { db, doc, runTransaction, collection, addDoc, serverTimestamp } = window.fb;
-  const contadorRef = doc(db,'contadores','lotes_cobranza');
+  const codigoVendedor = getVendorCode();
+  const contadorRef = doc(db,'contadores','lotes_cobranza_'+codigoVendedor);
   const numero = await runTransaction(db, async (tx)=>{
     const snap = await tx.get(contadorRef);
     const actual = snap.exists() ? (snap.data().ultimo||0) : 0;
@@ -3689,10 +3690,10 @@ async function cobranzaCrearLote(){
     tx.set(contadorRef, { ultimo: siguiente }, {merge:true});
     return siguiente;
   });
-  const numeroLote = 'LOTE-'+String(numero).padStart(6,'0');
+  const numeroLote = 'LOTE-'+codigoVendedor+'-'+String(numero).padStart(4,'0');
   const data = {
     numero_lote: numeroLote,
-    vendedor_code: getVendorCode(), vendedor_nombre: currentVendor, zona: (RAW_DATA.find(r=>r.vend===currentVendor)||{}).zona||'',
+    vendedor_code: codigoVendedor, vendedor_nombre: currentVendor, zona: (RAW_DATA.find(r=>r.vend===currentVendor)||{}).zona||'',
     estado: 'abierto', fecha_apertura: serverTimestamp(), fecha_cierre: null
   };
   const ref = await addDoc(collection(db,'lotes_cobranza'), data);
@@ -4266,15 +4267,15 @@ async function cobranzaRenderRecibo(){
     </tr>`;
   }).join('');
 
-  function filaValor(label, monto, extra){
-    return `<div style="display:flex;justify-content:space-between;font-size:12px;color:#5f6368;padding:3px 0"><span>${label}${extra?(' — '+extra):''}</span><span>${money(monto)}</span></div>`;
+  function filaValor(label, monto, extra, fotoPath){
+    return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#5f6368;padding:3px 0"><span>${label}${extra?(' — '+extra):''}${fotoPath?` <a href="javascript:void(0)" onclick="adminVerAdjunto('${fotoPath.replace(/'/g,"\\'")}')" style="color:#1a73e8;text-decoration:none">📷</a>`:''}</span><span>${money(monto)}</span></div>`;
   }
   let valoresHtml = '';
   if(r.efectivo) valoresHtml += filaValor('Efectivo', r.efectivo, r.efectivo_modo==='billetes' ? 'por billete' : '');
-  (r.cheques||[]).forEach(function(c){ valoresHtml += filaValor('Cheque', c.monto, c.numero); });
-  (r.echeqs||[]).forEach(function(c){ valoresHtml += filaValor('eCheq', c.monto, c.numero); });
-  (r.transferencias||[]).forEach(function(c){ valoresHtml += filaValor('Transferencia', c.monto, [c.referencia, c.fecha].filter(Boolean).join(' · ')); });
-  (r.retenciones||[]).forEach(function(c){ valoresHtml += filaValor('Retención '+c.tipo, c.monto, c.numero); });
+  (r.cheques||[]).forEach(function(c){ valoresHtml += filaValor('Cheque', c.monto, c.numero, c.foto_path); });
+  (r.echeqs||[]).forEach(function(c){ valoresHtml += filaValor('eCheq', c.monto, c.numero, c.foto_path); });
+  (r.transferencias||[]).forEach(function(c){ valoresHtml += filaValor('Transferencia', c.monto, [c.referencia, c.fecha].filter(Boolean).join(' · '), c.foto_path); });
+  (r.retenciones||[]).forEach(function(c){ valoresHtml += filaValor('Retención '+c.tipo, c.monto, c.numero, c.foto_path); });
 
   el.innerHTML = `
     ${anulado ? '<div style="background:#fce8e6;color:#c5221f;text-align:center;font-weight:800;font-size:12.5px;padding:8px;border-radius:8px;margin-bottom:12px">🚫 RECIBO ANULADO</div>' : ''}
@@ -4695,31 +4696,40 @@ function cobranzaDentroDeTolerancia(esperado, registrado){
   return Math.abs(diferencia) <= tolerancia;
 }
 
+function cobranzaBotonFoto(arr, i, c){
+  return `<span class="cwiz-foto-btn" data-foto-arr="${arr}" data-foto-idx="${i}" style="font-size:17px;cursor:pointer;align-self:center" title="${c.foto_path?'Ver foto':'Adjuntar foto (respaldo)'}">${c.foto_path?'📷✓':'📷'}</span>
+    ${c.foto_path?`<span class="cwiz-foto-retake-btn" data-foto-arr="${arr}" data-foto-idx="${i}" style="font-size:14px;cursor:pointer;align-self:center;color:#1a73e8" title="Reemplazar foto">↺</span>`:''}
+    <input type="file" accept="image/*" id="cwiz-foto-${arr}-${i}" data-foto-arr="${arr}" data-foto-idx="${i}" style="display:none">`;
+}
+
 function cobranzaFilaValor(arr, i, c, placeholderMonto, placeholderExtra, campoExtra){
-  return `<div style="display:flex;gap:6px;margin-bottom:6px">
+  return `<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
     <input type="number" step="0.01" inputmode="decimal" placeholder="${placeholderMonto}" data-arr="${arr}" data-idx="${i}" data-field="monto" value="${c.monto||''}" style="flex:1" class="alta-input">
     <input type="text" placeholder="${placeholderExtra}" data-arr="${arr}" data-idx="${i}" data-field="${campoExtra}" value="${c[campoExtra]||''}" style="flex:1" class="alta-input">
+    ${cobranzaBotonFoto(arr,i,c)}
     <span data-rm="${arr}" data-idx="${i}" style="color:#ea4335;font-size:20px;cursor:pointer;align-self:center;padding:0 4px">✕</span>
   </div>`;
 }
 
 function cobranzaFilaRetencion(i, r){
-  return `<div style="display:flex;gap:6px;margin-bottom:6px">
+  return `<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
     <select data-arr="retenciones" data-idx="${i}" data-field="tipo" class="alta-input" style="flex:1">
       <option${r.tipo==='Ganancias'?' selected':''}>Ganancias</option>
       <option${r.tipo==='IIBB'?' selected':''}>IIBB</option>
     </select>
     <input type="number" step="0.01" inputmode="decimal" placeholder="Importe" data-arr="retenciones" data-idx="${i}" data-field="monto" value="${r.monto||''}" style="flex:1" class="alta-input">
     <input type="text" placeholder="N° (opcional)" data-arr="retenciones" data-idx="${i}" data-field="numero" value="${r.numero||''}" style="flex:1" class="alta-input">
+    ${cobranzaBotonFoto('retenciones',i,r)}
     <span data-rm="retenciones" data-idx="${i}" style="color:#ea4335;font-size:20px;cursor:pointer;align-self:center;padding:0 4px">✕</span>
   </div>`;
 }
 
 function cobranzaFilaTransferencia(i, c){
   return `<div style="border:1px solid #e8eaed;border-radius:8px;padding:8px;margin-bottom:8px">
-    <div style="display:flex;gap:6px;margin-bottom:6px">
+    <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
       <input type="number" step="0.01" inputmode="decimal" placeholder="Monto transferencia" data-arr="transferencias" data-idx="${i}" data-field="monto" value="${c.monto||''}" style="flex:1" class="alta-input">
       <input type="text" placeholder="Referencia (opcional)" data-arr="transferencias" data-idx="${i}" data-field="referencia" value="${c.referencia||''}" style="flex:1" class="alta-input">
+      ${cobranzaBotonFoto('transferencias',i,c)}
       <span data-rm="transferencias" data-idx="${i}" style="color:#ea4335;font-size:20px;cursor:pointer;align-self:center;padding:0 4px">✕</span>
     </div>
     <label style="font-size:10px;color:#5f6368;font-weight:700;display:block;margin-bottom:2px">Fecha de la transferencia *</label>
@@ -4842,6 +4852,52 @@ function cobranzaRenderWizard(){
       cobranzaRenderWizard();
     };
   });
+
+  // Foto de respaldo por valor (cheque/eCheq/transferencia/retención) — si ya
+  // tiene una, tocar el ícono la abre para verla; si no, abre el selector de
+  // archivo. El ícono "↺" (solo visible si ya hay foto) sirve para reemplazarla.
+  el.querySelectorAll('.cwiz-foto-btn').forEach(function(btn){
+    btn.onclick = function(){
+      const arr = this.dataset.fotoArr, idx = this.dataset.fotoIdx;
+      const item = s[arr][idx];
+      if(item.foto_path){
+        adminVerAdjunto(item.foto_path);
+      } else {
+        document.getElementById('cwiz-foto-'+arr+'-'+idx).click();
+      }
+    };
+  });
+  el.querySelectorAll('.cwiz-foto-retake-btn').forEach(function(btn){
+    btn.onclick = function(){
+      const arr = this.dataset.fotoArr, idx = this.dataset.fotoIdx;
+      document.getElementById('cwiz-foto-'+arr+'-'+idx).click();
+    };
+  });
+  el.querySelectorAll('input[data-foto-arr]').forEach(function(input){
+    input.onchange = async function(e){
+      const file = e.target.files[0];
+      if(!file) return;
+      const arr = input.dataset.fotoArr, idx = input.dataset.fotoIdx;
+      const btn = el.querySelector('.cwiz-foto-btn[data-foto-arr="'+arr+'"][data-foto-idx="'+idx+'"]');
+      if(btn) btn.textContent = '⏳';
+      try{
+        const path = await cobranzaSubirFotoValor(file, arr);
+        s[arr][idx].foto_path = path;
+        cobranzaRenderWizard();
+      }catch(err){
+        console.error('[cobranza foto]', err);
+        alert('No se pudo subir la foto: '+(err.message||err));
+        if(btn) btn.textContent = '📷';
+      }
+    };
+  });
+}
+
+async function cobranzaSubirFotoValor(file, arr){
+  const { storage, ref, uploadBytes } = window.fb;
+  const path = 'cobranzas_fotos/'+Date.now()+'_'+getVendorCode()+'_'+arr+'_'+file.name;
+  await uploadBytes(ref(storage, path), file);
+  return path;
 }
 
 async function cobranzaCalcularHash(texto){
