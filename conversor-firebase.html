@@ -203,6 +203,20 @@
     <div id="status-ctacte" class="status"></div>
     <button class="secondary" id="dl-ctacte" style="display:none" onclick="subirCtaCteFirestore()">☁️ Subir a Firebase</button>
   </div>
+  <!-- 7. DETALLE DE VENTA (COBRANZAS) → colección "detalle_venta" en Firestore (ACUMULATIVO, nunca se borra) -->
+  <div class="card">
+    <h2>📦 Detalle de Venta (Cobranzas) <span class="badge">diaria</span></h2>
+    <p class="desc">Guarda qué productos componen cada comprobante (SKU, descripción, cantidad, importe), para que el vendedor pueda verlo al elegir qué cobrar. A diferencia de Cta.Cte, esto <b>nunca se borra</b> — se va acumulando para siempre, así un comprobante viejo que siga impago no pierde su detalle aunque ya no esté en la ventana de días del archivo. La primera vez subí varios meses de historial; después alcanza con subirlo con cierta regularidad (el archivo ya trae unos días superpuestos, así que saltear un día no rompe nada).</p>
+    <div class="row">
+      <div class="field">
+        <label>Archivo Detalle de Venta (.csv, .xls, .xlsx)</label>
+        <input type="file" id="f-detventa" accept=".csv,.xls,.xlsx">
+      </div>
+      <button onclick="procesarDetalleVenta()">Procesar</button>
+    </div>
+    <div id="status-detventa" class="status"></div>
+    <button class="secondary" id="dl-detventa" style="display:none" onclick="subirDetalleVentaFirestore()">☁️ Subir a Firebase</button>
+  </div>
 
 </main>
 
@@ -1089,6 +1103,95 @@ async function subirCtaCteFirestore(){
   }catch(err){
     console.error(err);
     showStatus('status-ctacte','err','Error al sincronizar: '+err.message);
+  }
+}
+
+// ══════════════════════════════════════════════
+// 7. DETALLE DE VENTA (COBRANZAS) — se acumula, nunca se borra
+// ══════════════════════════════════════════════
+async function procesarDetalleVenta(){
+  var file = document.getElementById('f-detventa').files[0];
+  document.getElementById('dl-detventa').style.display = 'none';
+  if(!file){ showStatus('status-detventa','err','Subí el archivo de Detalle de Venta.'); return; }
+  showStatus('status-detventa','info','Leyendo el archivo (puede tardar, es grande)...');
+
+  try{
+    var t = await smartReadTabular(file);
+    var h = t.header;
+
+    var iFecha = ci(h,'fecha facturacion');
+    var iVendCod = ci(h,'vendedor.'); if(iVendCod<0) iVendCod = ci(h,'vendedor');
+    var iVendNom = ci(h,'nombre vendedor');
+    var iSku = ci(h,'producto.'); if(iSku<0) iSku = ci(h,'producto');
+    var iDesc = ci(h,'descripción del producto.'); if(iDesc<0) iDesc = ci(h,'descripcion del producto');
+    var iTipo = ci(h,'factu_codigo');
+    var iNumero = ci(h,'número de factura.'); if(iNumero<0) iNumero = ci(h,'numero de factura');
+    var iCant = ci(h,'cantidad.'); if(iCant<0) iCant = ci(h,'cantidad');
+    var iVentaGravada = ci(h,'venta gravada');
+    var iIva = ci(h,'iva.'); if(iIva<0) iIva = ci(h,'iva');
+    var iPrecioFinal = ci(h,'precio final.'); if(iPrecioFinal<0) iPrecioFinal = ci(h,'precio final');
+    var iSucursal = ci(h,'sucursal');
+
+    showStatus('status-detventa','info','Agrupando '+t.rows.length+' líneas por comprobante...');
+    await new Promise(function(res){ setTimeout(res, 30); }); // deja pintar el mensaje antes de trabar el hilo
+
+    var grupos = new Map();
+    var sinDatos = 0;
+    t.rows.forEach(function(r){
+      var tipo = String(r[iTipo]||'').trim();
+      var numero = r[iNumero];
+      var sucursal = r[iSucursal];
+      if(!tipo || numero==null || numero==='' || sucursal==null || sucursal===''){ sinDatos++; return; }
+      var key = idComprobante(tipo, sucursal, numero);
+      if(!grupos.has(key)){
+        var fechaVal = r[iFecha];
+        grupos.set(key, {
+          tipo: tipo, sucursal: String(sucursal).trim(), numero: String(numero).trim(),
+          fecha_facturacion: (fechaVal instanceof Date) ? fechaVal.toISOString().slice(0,10) : String(fechaVal||''),
+          vendedor_code: String(r[iVendCod]||'').trim(), vendedor_nombre: String(r[iVendNom]||'').trim(),
+          items: []
+        });
+      }
+      grupos.get(key).items.push({
+        sku: String(r[iSku]||'').trim(), descripcion: String(r[iDesc]||'').trim(),
+        cantidad: pm(r[iCant]), venta_gravada: pm(r[iVentaGravada]), iva: pm(r[iIva]), precio_final: pm(r[iPrecioFinal])
+      });
+    });
+
+    window._detalleVentaOut = grupos;
+    var msg = '✓ '+t.rows.length+' líneas agrupadas en '+grupos.size+' comprobantes. Tocá "Subir a Firebase".\n'
+      +'⏱️ Con historial grande esto puede tardar varios minutos en subir — dejá la pestaña abierta.';
+    if(sinDatos) msg += '\n⚠️ '+sinDatos+' línea(s) sin tipo/número/sucursal (omitidas).';
+    showStatus('status-detventa','ok',msg);
+    document.getElementById('dl-detventa').style.display = 'inline-block';
+  }catch(err){
+    console.error(err);
+    showStatus('status-detventa','err','Error: '+err.message);
+  }
+}
+
+async function subirDetalleVentaFirestore(){
+  if(!window._detalleVentaOut){ showStatus('status-detventa','err','Primero procesá el archivo.'); return; }
+  try{
+    const { db, doc, writeBatch } = window.fb;
+    const entries = [...window._detalleVentaOut.entries()];
+    const LOTE = 400;
+    const totalLotes = Math.ceil(entries.length/LOTE);
+    for(let i=0;i<entries.length;i+=LOTE){
+      const loteActual = Math.floor(i/LOTE)+1;
+      showStatus('status-detventa','info','Subiendo lote '+loteActual+' de '+totalLotes+'... ('+Math.min(i+LOTE,entries.length)+'/'+entries.length+' comprobantes)');
+      const batch = writeBatch(db);
+      entries.slice(i,i+LOTE).forEach(function(e){
+        batch.set(doc(db,'detalle_venta',e[0]), e[1], {merge:true});
+      });
+      await batch.commit();
+    }
+    showStatus('status-detventa','ok','✓ '+entries.length+' comprobantes con detalle de producto sincronizados (se acumulan, nunca se borran).');
+    window._detalleVentaOut = null;
+    document.getElementById('dl-detventa').style.display = 'none';
+  }catch(err){
+    console.error(err);
+    showStatus('status-detventa','err','Error al sincronizar: '+err.message);
   }
 }
 </script>
