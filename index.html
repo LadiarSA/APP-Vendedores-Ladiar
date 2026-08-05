@@ -3959,6 +3959,48 @@ async function cobranzaRenderLoteDetalle(){
   }
 }
 
+function cobranzaCalcularResumenDeLote(recibos, gastosLote){
+  const activos = recibos.filter(function(r){ return r.estado!=='anulado'; });
+  const clientesMap = {};
+  const transferenciasDetalle = [];
+  let totalEfectivo=0, totalCheques=0, totalEcheqs=0, totalTransferencias=0, totalRetenciones=0, totalComprobantes=0;
+  const billetes = {};
+  activos.forEach(function(r){
+    totalEfectivo += Number(r.efectivo)||0;
+    (r.cheques||[]).forEach(function(c){ totalCheques += Number(c.monto)||0; });
+    (r.echeqs||[]).forEach(function(c){ totalEcheqs += Number(c.monto)||0; });
+    (r.transferencias||[]).forEach(function(c){
+      totalTransferencias += Number(c.monto)||0;
+      transferenciasDetalle.push({
+        cliente_id: r.cliente_id, cliente_nombre: r.cliente_nombre, numero_recibo: r.numero_recibo,
+        monto: Number(c.monto)||0, referencia: c.referencia||'', fecha: c.fecha||''
+      });
+    });
+    (r.retenciones||[]).forEach(function(c){ totalRetenciones += Number(c.monto)||0; });
+    totalComprobantes += Number(r.total_comprobantes)||0;
+    if(r.efectivo_modo==='billetes' && r.efectivo_billetes){
+      Object.entries(r.efectivo_billetes).forEach(function(e){
+        billetes[e[0]] = (Number(billetes[e[0]])||0) + (Number(e[1])||0);
+      });
+    }
+    if(!clientesMap[r.cliente_id]) clientesMap[r.cliente_id] = { cliente_id:r.cliente_id, cliente_nombre:r.cliente_nombre, total:0 };
+    clientesMap[r.cliente_id].total += Number(r.total_registrado)||0;
+  });
+  const totalCobrado = totalEfectivo+totalCheques+totalEcheqs+totalTransferencias+totalRetenciones;
+  const gastos = (gastosLote||[]).filter(function(g){ return g.monto && Number(g.monto)>0; });
+  const totalGastos = gastos.reduce(function(acc,g){ return acc+(Number(g.monto)||0); }, 0);
+  const totalEfectivoNeto = Math.round((totalEfectivo-totalGastos)*100)/100;
+
+  return {
+    cantidad_recibos: activos.length, cantidad_clientes: Object.keys(clientesMap).length,
+    total_comprobantes: totalComprobantes, total_cobrado: totalCobrado,
+    total_efectivo: totalEfectivo, total_cheques: totalCheques, total_echeqs: totalEcheqs,
+    total_transferencias: totalTransferencias, total_retenciones: totalRetenciones,
+    billetes: billetes, clientes: Object.values(clientesMap), transferencias: transferenciasDetalle,
+    gastos: gastos, total_gastos: totalGastos, total_efectivo_neto: totalEfectivoNeto
+  };
+}
+
 async function cobranzaCerrarLote(){
   const l = cobranzaLoteViendoActual;
   if(!l || l.estado!=='abierto') return;
@@ -3973,53 +4015,15 @@ async function cobranzaCerrarLote(){
     const snap = await getDocs(q);
     const recibos = [];
     snap.forEach(function(d){ recibos.push(Object.assign({id:d.id}, d.data())); });
-    const activos = recibos.filter(function(r){ return r.estado!=='anulado'; });
 
-    const clientesMap = {};
-    const transferenciasDetalle = [];
-    let totalEfectivo=0, totalCheques=0, totalEcheqs=0, totalTransferencias=0, totalRetenciones=0, totalComprobantes=0;
-    const billetes = {};
-    activos.forEach(function(r){
-      totalEfectivo += Number(r.efectivo)||0;
-      (r.cheques||[]).forEach(function(c){ totalCheques += Number(c.monto)||0; });
-      (r.echeqs||[]).forEach(function(c){ totalEcheqs += Number(c.monto)||0; });
-      (r.transferencias||[]).forEach(function(c){
-        totalTransferencias += Number(c.monto)||0;
-        transferenciasDetalle.push({
-          cliente_id: r.cliente_id, cliente_nombre: r.cliente_nombre, numero_recibo: r.numero_recibo,
-          monto: Number(c.monto)||0, referencia: c.referencia||'', fecha: c.fecha||''
-        });
-      });
-      (r.retenciones||[]).forEach(function(c){ totalRetenciones += Number(c.monto)||0; });
-      totalComprobantes += Number(r.total_comprobantes)||0;
-      if(r.efectivo_modo==='billetes' && r.efectivo_billetes){
-        Object.entries(r.efectivo_billetes).forEach(function(e){
-          billetes[e[0]] = (Number(billetes[e[0]])||0) + (Number(e[1])||0);
-        });
-      }
-      if(!clientesMap[r.cliente_id]) clientesMap[r.cliente_id] = { cliente_id:r.cliente_id, cliente_nombre:r.cliente_nombre, total:0 };
-      clientesMap[r.cliente_id].total += Number(r.total_registrado)||0;
-    });
-    const totalCobrado = totalEfectivo+totalCheques+totalEcheqs+totalTransferencias+totalRetenciones;
-    const gastos = (l.gastos||[]).filter(function(g){ return g.monto && Number(g.monto)>0; });
-    const totalGastos = gastos.reduce(function(acc,g){ return acc+(Number(g.monto)||0); }, 0);
-    const totalEfectivoNeto = Math.round((totalEfectivo-totalGastos)*100)/100;
-
-    const resumen = {
-      cantidad_recibos: activos.length, cantidad_clientes: Object.keys(clientesMap).length,
-      total_comprobantes: totalComprobantes, total_cobrado: totalCobrado,
-      total_efectivo: totalEfectivo, total_cheques: totalCheques, total_echeqs: totalEcheqs,
-      total_transferencias: totalTransferencias, total_retenciones: totalRetenciones,
-      billetes: billetes, clientes: Object.values(clientesMap), transferencias: transferenciasDetalle,
-      gastos: gastos, total_gastos: totalGastos, total_efectivo_neto: totalEfectivoNeto
-    };
+    const resumen = cobranzaCalcularResumenDeLote(recibos, l.gastos);
 
     await setDoc(doc(db,'lotes_cobranza',l.id), { estado:'cerrado', fecha_cierre: serverTimestamp(), resumen: resumen }, {merge:true});
 
     cobranzaLoteViendoActual = Object.assign({}, l, { estado:'cerrado', resumen: resumen });
     if(cobranzaLoteActual && cobranzaLoteActual.id===l.id) cobranzaLoteActual = null; // ya no hay lote abierto
     await cobranzaRenderLoteDetalle();
-    alert('✅ Lote '+l.numero_lote+' cerrado. Total cobrado: '+money(totalCobrado)+'.\n\nDesde este mismo lote podés descargar/compartir el PDF resumen para llevar a la oficina.');
+    alert('✅ Lote '+l.numero_lote+' cerrado. Total cobrado: '+money(resumen.total_cobrado)+'.\n\nDesde este mismo lote podés descargar/compartir el PDF resumen para llevar a la oficina.');
   }catch(err){
     console.error('[cobranzaCerrarLote]', err);
     alert('Error al cerrar el lote: '+(err.message||err));
@@ -4491,20 +4495,38 @@ function cobranzaRenderComprobantes(){
   if(!lista.length){
     el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px">Este cliente no tiene comprobantes disponibles para cobrar.</div>';
   } else {
-    el.innerHTML = lista.map(function(c){
+    const todosSeleccionados = lista.every(function(c){ return cobranzaSeleccionados.has(c.id); });
+    let html = `<div onclick="cobranzaToggleTodosComprobantes()" style="text-align:right;margin-bottom:8px">
+      <span style="color:#1a73e8;font-size:12px;font-weight:700;cursor:pointer">${todosSeleccionados?'Deseleccionar todos':'Seleccionar todos'}</span>
+    </div>`;
+    html += lista.map(function(c){
       const activo = cobranzaSeleccionados.has(c.id);
-      return `<div onclick="cobranzaToggleComprobante('${c.id}')" style="background:#fff;border:1.5px solid ${activo?'#0d652d':'#e8eaed'};border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;gap:10px">
+      const esNC = String(c.tipo||'').toUpperCase().indexOf('NC')===0;
+      const esNegativo = Number(c.saldo)<0;
+      return `<div onclick="cobranzaToggleComprobante('${c.id}')" style="background:#fff;border:1.5px solid ${activo?'#0d652d':(esNC?'#f9ab00':'#e8eaed')};border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;gap:10px">
         <div style="width:20px;height:20px;border-radius:5px;border:2px solid ${activo?'#0d652d':'#c4c7c5'};background:${activo?'#0d652d':'#fff'};display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;font-size:13px;font-weight:800">${activo?'✓':''}</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:12.5px;font-weight:700;color:#202124">${c.tipo||''} ${c.sucursal||''}-${c.numero||''}</div>
+          <div style="font-size:12.5px;font-weight:700;color:#202124">${c.tipo||''} ${c.sucursal||''}-${c.numero||''} ${esNC?'<span style="font-size:9px;font-weight:800;color:#fff;background:#f9ab00;border-radius:8px;padding:1px 6px;margin-left:4px">NOTA DE CRÉDITO</span>':''}</div>
           <div style="font-size:10.5px;color:#9aa0a6">Vence ${c.fecha_vencimiento||'—'} · ${c.dias_vencidos>0?c.dias_vencidos+' días vencido':'al día'}${c.vendedor_code && c.vendedor_code!==getVendorCode() ? ' · vend. '+c.vendedor_code : ''}</div>
         </div>
         <span onclick="event.stopPropagation(); cobranzaVerDetalleComprobante('${c.id}')" style="font-size:16px;padding:4px;flex-shrink:0;cursor:pointer" title="Ver qué mercadería compone este comprobante">👁</span>
-        <div style="font-size:13px;font-weight:800;color:#202124;white-space:nowrap">${money(c.saldo)}</div>
+        <div style="font-size:13px;font-weight:800;color:${esNegativo?'#ea4335':'#202124'};white-space:nowrap">${money(c.saldo)}</div>
       </div>`;
     }).join('');
+    el.innerHTML = html;
   }
   cobranzaActualizarTotal();
+}
+
+function cobranzaToggleTodosComprobantes(){
+  const lista = cobranzaComprobantesDisponibles;
+  const todosSeleccionados = lista.every(function(c){ return cobranzaSeleccionados.has(c.id); });
+  if(todosSeleccionados){
+    cobranzaSeleccionados = new Set();
+  } else {
+    lista.forEach(function(c){ cobranzaSeleccionados.add(c.id); });
+  }
+  cobranzaRenderComprobantes();
 }
 
 async function cobranzaVerDetalleComprobante(id){
@@ -7157,6 +7179,7 @@ function adminInitCobranzasFiltros(){
 }
 
 function adminLimpiarFiltrosCobranzas(){
+  document.getElementById('admin-cobranza-estado').value = 'cerrado';
   document.getElementById('admin-cobranza-vend').value = '';
   document.getElementById('admin-cobranza-desde').value = '';
   document.getElementById('admin-cobranza-hasta').value = '';
@@ -7170,9 +7193,26 @@ async function adminCargarCobranzas(){
   el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px">Cargando...</div>';
   try{
     const { db, collection, getDocs, query, where } = window.fb;
-    const snap = await getDocs(query(collection(db,'lotes_cobranza'), where('estado','==','cerrado')));
+    const estadoFiltro = document.getElementById('admin-cobranza-estado').value;
+    const snap = estadoFiltro==='todos'
+      ? await getDocs(collection(db,'lotes_cobranza'))
+      : await getDocs(query(collection(db,'lotes_cobranza'), where('estado','==',estadoFiltro)));
     let lista = [];
     snap.forEach(function(d){ lista.push(Object.assign({id:d.id}, d.data())); });
+
+    // Los lotes abiertos todavía no tienen "resumen" calculado (eso recién se
+    // arma al cerrar) — para poder mostrarlos igual, lo calculamos al vuelo,
+    // en vivo, sin escribir nada en Firestore (es solo para visualizar).
+    const abiertos = lista.filter(function(l){ return l.estado==='abierto'; });
+    for(const l of abiertos){
+      try{
+        const qr = query(collection(db,'recibos_cobranza'), where('lote_id','==',l.id));
+        const snapR = await getDocs(qr);
+        const recibos = [];
+        snapR.forEach(function(d){ recibos.push(Object.assign({id:d.id}, d.data())); });
+        l.resumen = cobranzaCalcularResumenDeLote(recibos, l.gastos);
+      }catch(e){ console.error('[adminCargarCobranzas] resumen en vivo', e); }
+    }
 
     const vend = document.getElementById('admin-cobranza-vend').value;
     const desde = document.getElementById('admin-cobranza-desde').value;
@@ -7182,11 +7222,17 @@ async function adminCargarCobranzas(){
     if(vend) lista = lista.filter(function(l){ return l.vendedor_nombre===vend; });
     if(desde){
       const desdeMs = new Date(desde+'T00:00:00').getTime();
-      lista = lista.filter(function(l){ return l.fecha_cierre && l.fecha_cierre.toMillis && l.fecha_cierre.toMillis()>=desdeMs; });
+      lista = lista.filter(function(l){
+        const ref = l.estado==='abierto' ? l.fecha_apertura : l.fecha_cierre;
+        return ref && ref.toMillis && ref.toMillis()>=desdeMs;
+      });
     }
     if(hasta){
       const hastaMs = new Date(hasta+'T23:59:59').getTime();
-      lista = lista.filter(function(l){ return l.fecha_cierre && l.fecha_cierre.toMillis && l.fecha_cierre.toMillis()<=hastaMs; });
+      lista = lista.filter(function(l){
+        const ref = l.estado==='abierto' ? l.fecha_apertura : l.fecha_cierre;
+        return ref && ref.toMillis && ref.toMillis()<=hastaMs;
+      });
     }
     if(clienteQ){
       lista = lista.filter(function(l){
@@ -7197,9 +7243,11 @@ async function adminCargarCobranzas(){
     }
 
     lista.sort(function(a,b){
-      const ta = a.fecha_cierre && a.fecha_cierre.toMillis ? a.fecha_cierre.toMillis() : 0;
-      const tb = b.fecha_cierre && b.fecha_cierre.toMillis ? b.fecha_cierre.toMillis() : 0;
-      return tb-ta;
+      const ta = (a.estado==='abierto'?a.fecha_apertura:a.fecha_cierre);
+      const tb = (b.estado==='abierto'?b.fecha_apertura:b.fecha_cierre);
+      const tam = ta && ta.toMillis ? ta.toMillis() : 0;
+      const tbm = tb && tb.toMillis ? tb.toMillis() : 0;
+      return tbm-tam;
     });
 
     adminCobranzasCache = lista;
@@ -7210,19 +7258,23 @@ async function adminCargarCobranzas(){
       totalRecibos += (l.resumen && l.resumen.cantidad_recibos) || 0;
     });
     document.getElementById('admin-cobranza-resumen').textContent =
-      lista.length+' lote(s) cerrado(s) · '+totalRecibos+' recibo(s) · '+money(totalGeneral)+' cobrados';
+      lista.length+' lote(s) · '+totalRecibos+' recibo(s) · '+money(totalGeneral)+' cobrados';
 
     if(!lista.length){
-      el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px">No hay lotes cerrados con estos filtros.</div>';
+      el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px">No hay lotes con estos filtros.</div>';
       return;
     }
 
     el.innerHTML = lista.map(function(l){
       const r = l.resumen || {};
-      return `<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:14px 16px;margin-bottom:12px;cursor:pointer" onclick="adminVerLoteCobranzaModal('${l.id}')">
+      const abierto = l.estado==='abierto';
+      return `<div style="background:#fff;border:1px solid ${abierto?'#f9ab00':'#e8eaed'};border-radius:10px;padding:14px 16px;margin-bottom:12px;cursor:pointer" onclick="adminVerLoteCobranzaModal('${l.id}')">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
           <div>
-            <div style="font-size:13.5px;font-weight:700;color:#2c3e50">${l.numero_lote}</div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="font-size:13.5px;font-weight:700;color:#2c3e50">${l.numero_lote}</div>
+              ${abierto ? '<span style="font-size:9px;font-weight:700;color:#fff;background:#f9ab00;border-radius:10px;padding:2px 8px">ABIERTO</span>' : ''}
+            </div>
             <div style="font-size:11px;color:#9aa0a6">${l.vendedor_nombre||''} (${l.vendedor_code||''}) · ${l.zona||''}</div>
           </div>
           <div style="text-align:right">
@@ -7230,7 +7282,7 @@ async function adminCargarCobranzas(){
             <div style="font-size:10px;color:#9aa0a6">${r.cantidad_recibos||0} recibo(s) · ${r.cantidad_clientes||0} cliente(s)</div>
           </div>
         </div>
-        <div style="font-size:10.5px;color:#9aa0a6;margin-top:6px">Abierto ${cobranzaFmtFechaHora(l.fecha_apertura)} · Cerrado ${cobranzaFmtFechaHora(l.fecha_cierre)}</div>
+        <div style="font-size:10.5px;color:#9aa0a6;margin-top:6px">Abierto ${cobranzaFmtFechaHora(l.fecha_apertura)}${!abierto?(' · Cerrado '+cobranzaFmtFechaHora(l.fecha_cierre)):' · en curso'}</div>
       </div>`;
     }).join('');
   }catch(err){
@@ -7339,7 +7391,7 @@ async function adminExportCobranzasExcel(){
     activos.forEach(function(r){
       const billetes = (r.efectivo_modo==='billetes' && r.efectivo_billetes) ? r.efectivo_billetes : {};
       const fila = [
-        r.vendedor_nombre||'', r.cliente_nombre||'', r.numero_recibo||'', cobranzaFmtFechaHora(r.fecha_hora), r.sucursal||'',
+        r.vendedor_code||'', r.cliente_id||'', r.numero_recibo||'', cobranzaFmtFechaHora(r.fecha_hora), r.sucursal||'',
         r.total_registrado||0
       ];
       DENOMINACIONES_ARS_COBRANZA.forEach(function(d){ fila.push(Number(billetes[d])||0); });
@@ -9362,6 +9414,14 @@ function supRenderHelados(data){
   <!-- COBRANZAS -->
   <div id="admin-panel-cobranzas" style="display:none;flex:1;flex-direction:column;overflow:hidden">
     <div style="background:#f8f9fa;border-bottom:1px solid #e8eaed;padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
+      <div>
+        <label style="font-size:9.5px;color:#5f6368;font-weight:700;display:block;margin-bottom:2px">Estado</label>
+        <select id="admin-cobranza-estado" onchange="adminCargarCobranzas()" style="font-size:11.5px;padding:6px 8px;border:1px solid #dadce0;border-radius:6px">
+          <option value="cerrado">Cerrados</option>
+          <option value="abierto">Abiertos</option>
+          <option value="todos">Todos</option>
+        </select>
+      </div>
       <div>
         <label style="font-size:9.5px;color:#5f6368;font-weight:700;display:block;margin-bottom:2px">Vendedor</label>
         <select id="admin-cobranza-vend" onchange="adminCargarCobranzas()" style="font-size:11.5px;padding:6px 8px;border:1px solid #dadce0;border-radius:6px"></select>

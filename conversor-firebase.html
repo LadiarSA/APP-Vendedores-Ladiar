@@ -975,7 +975,7 @@ function parseClienteCondicion(texto){
   texto = String(texto||'').trim();
   var mCodigo = texto.match(/^(\d+)\s+(.*)$/);
   if(!mCodigo) return {codigo:'', nombre:texto, condicion:''};
-  var codigo = mCodigo[1];
+  var codigo = String(parseInt(mCodigo[1],10)); // saca ceros a la izquierda (ej. "0373" -> "373")
   var resto = mCodigo[2];
   var idx = resto.lastIndexOf('-');
   if(idx===-1) return {codigo:codigo, nombre:resto.trim(), condicion:''};
@@ -1018,7 +1018,7 @@ async function procesarCtaCte(){
     t.rows.forEach(function(c){
       var codigo, nombre, condicion;
       if(iCodigoCol>=0 && iNombreCol>=0){
-        codigo = String(c[iCodigoCol]||'').trim();
+        codigo = String(parseInt(c[iCodigoCol],10)||'').trim();
         nombre = String(c[iNombreCol]||'').trim();
         condicion = iCondicionCol>=0 ? String(c[iCondicionCol]||'').trim() : '';
       } else {
