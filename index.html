@@ -129,7 +129,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc, writeBatch, getDoc, addDoc, serverTimestamp, query, where, orderBy, runTransaction, arrayUnion }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-  import { getStorage, ref, getBytes, uploadBytes }
+  import { getStorage, ref, getBytes, uploadBytes, getDownloadURL }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
   const firebaseConfig = {
@@ -146,7 +146,7 @@ body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:#f1
   const db = getFirestore(app);
   const storage = getStorage(app);
 
-  window.fb = { auth, db, storage, signInWithEmailAndPassword, signOut, getIdTokenResult, collection, getDocs, ref, getBytes, doc, setDoc, deleteDoc, writeBatch, getDoc, addDoc, serverTimestamp, query, where, orderBy, uploadBytes, runTransaction, arrayUnion };
+  window.fb = { auth, db, storage, signInWithEmailAndPassword, signOut, getIdTokenResult, collection, getDocs, ref, getBytes, doc, setDoc, deleteDoc, writeBatch, getDoc, addDoc, serverTimestamp, query, where, orderBy, uploadBytes, runTransaction, arrayUnion, getDownloadURL };
   window.fbReady = true;
 
   // Cada vez que Firebase termina de chequear si hay una sesión guardada (al cargar
@@ -3965,6 +3965,7 @@ function cobranzaCalcularResumenDeLote(recibos, gastosLote){
   const activos = recibos.filter(function(r){ return r.estado!=='anulado'; });
   const clientesMap = {};
   const transferenciasDetalle = [];
+  const comentarios = [];
   let totalEfectivo=0, totalCheques=0, totalEcheqs=0, totalTransferencias=0, totalRetenciones=0, totalComprobantes=0;
   const billetes = {};
   activos.forEach(function(r){
@@ -3980,6 +3981,7 @@ function cobranzaCalcularResumenDeLote(recibos, gastosLote){
     });
     (r.retenciones||[]).forEach(function(c){ totalRetenciones += Number(c.monto)||0; });
     totalComprobantes += Number(r.total_comprobantes)||0;
+    if(r.comentario_interno) comentarios.push({ numero_recibo:r.numero_recibo, cliente_id:r.cliente_id, cliente_nombre:r.cliente_nombre, texto:r.comentario_interno });
     if(r.efectivo_modo==='billetes' && r.efectivo_billetes){
       Object.entries(r.efectivo_billetes).forEach(function(e){
         billetes[e[0]] = (Number(billetes[e[0]])||0) + (Number(e[1])||0);
@@ -3999,6 +4001,7 @@ function cobranzaCalcularResumenDeLote(recibos, gastosLote){
     total_efectivo: totalEfectivo, total_cheques: totalCheques, total_echeqs: totalEcheqs,
     total_transferencias: totalTransferencias, total_retenciones: totalRetenciones,
     billetes: billetes, clientes: Object.values(clientesMap), transferencias: transferenciasDetalle,
+    comentarios: comentarios,
     gastos: gastos, total_gastos: totalGastos, total_efectivo_neto: totalEfectivoNeto
   };
 }
@@ -4500,7 +4503,17 @@ async function cobranzaSeleccionarCliente(id){
   document.getElementById('cobranza-cliente-id').textContent = 'ID '+r.id+' · '+(r.canal||'');
   document.getElementById('cobranza-paso-buscar').style.display='none';
   document.getElementById('cobranza-paso-comprobantes').style.display='block';
-  document.getElementById('cobranza-comprobantes-lista').innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12px;padding:16px">Cargando comprobantes...</div>';
+  // El buscador y el link "Seleccionar todos" se arman UNA sola vez acá (el
+  // "cascarón" fijo); cobranzaRenderComprobantes() de ahora en más solo toca
+  // #cobranza-comprobantes-items, así escribir en el buscador no le hace
+  // perder el foco al campo en cada tecla.
+  document.getElementById('cobranza-comprobantes-lista').innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+      <input type="text" id="cobranza-filtro-comprobante" placeholder="Buscar por N° de comprobante" oninput="cobranzaRenderComprobantes()" class="alta-input" style="flex:1;margin:0">
+      <span id="cobranza-toggle-todos" onclick="cobranzaToggleTodosComprobantes()" style="display:none;color:#1a73e8;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Seleccionar todos</span>
+    </div>
+    <div id="cobranza-comprobantes-items"><div style="text-align:center;color:#9aa0a6;font-size:12px;padding:16px">Cargando comprobantes...</div></div>
+  `;
 
   try{
     const { db, collection, getDocs, query, where } = window.fb;
@@ -4512,21 +4525,41 @@ async function cobranzaSeleccionarCliente(id){
     cobranzaRenderComprobantes();
   }catch(err){
     console.error('[cobranzaSeleccionarCliente]', err);
-    document.getElementById('cobranza-comprobantes-lista').innerHTML = '<div style="text-align:center;color:#ea4335;font-size:12px;padding:16px">Error al cargar comprobantes: '+(err.message||err)+'</div>';
+    document.getElementById('cobranza-comprobantes-items').innerHTML = '<div style="text-align:center;color:#ea4335;font-size:12px;padding:16px">Error al cargar comprobantes: '+(err.message||err)+'</div>';
   }
 }
 
+function cobranzaComprobantesFiltrados(){
+  const filtroInput = document.getElementById('cobranza-filtro-comprobante');
+  const q = filtroInput ? filtroInput.value.trim().toLowerCase() : '';
+  if(!q) return cobranzaComprobantesDisponibles;
+  return cobranzaComprobantesDisponibles.filter(function(c){
+    return String(c.numero||'').toLowerCase().indexOf(q)!==-1 || String(c.tipo||'').toLowerCase().indexOf(q)!==-1;
+  });
+}
+
 function cobranzaRenderComprobantes(){
-  const el = document.getElementById('cobranza-comprobantes-lista');
+  const el = document.getElementById('cobranza-comprobantes-items');
+  if(!el) return;
   const lista = cobranzaComprobantesDisponibles;
+  const listaFiltrada = cobranzaComprobantesFiltrados();
+  const toggleTodosEl = document.getElementById('cobranza-toggle-todos');
+
   if(!lista.length){
     el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12.5px;padding:16px">Este cliente no tiene comprobantes disponibles para cobrar.</div>';
+    if(toggleTodosEl) toggleTodosEl.style.display = 'none';
   } else {
-    const todosSeleccionados = lista.every(function(c){ return cobranzaSeleccionados.has(c.id); });
-    let html = `<div onclick="cobranzaToggleTodosComprobantes()" style="text-align:right;margin-bottom:8px">
-      <span style="color:#1a73e8;font-size:12px;font-weight:700;cursor:pointer">${todosSeleccionados?'Deseleccionar todos':'Seleccionar todos'}</span>
-    </div>`;
-    html += lista.map(function(c){
+    if(toggleTodosEl){
+      toggleTodosEl.style.display = 'inline';
+      const todosSeleccionados = listaFiltrada.length>0 && listaFiltrada.every(function(c){ return cobranzaSeleccionados.has(c.id); });
+      toggleTodosEl.textContent = todosSeleccionados ? 'Deseleccionar todos' : 'Seleccionar todos';
+    }
+    if(!listaFiltrada.length){
+      el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12px;padding:14px">Ningún comprobante coincide con la búsqueda.</div>';
+      cobranzaActualizarTotal();
+      return;
+    }
+    let html = listaFiltrada.map(function(c){
       const activo = cobranzaSeleccionados.has(c.id);
       const esNC = String(c.tipo||'').toUpperCase().indexOf('NC')===0;
       const esNegativo = Number(c.saldo)<0;
@@ -4550,7 +4583,7 @@ function cobranzaRenderComprobantes(){
             <input type="checkbox" ${esParcial?'checked':''} onchange="cobranzaTogglePagoParcial('${c.id}', this.checked)">
             Cobro parcial de este comprobante
           </label>
-          ${esParcial ? `<input type="number" step="0.01" min="0.01" max="${c.saldo}" placeholder="Monto a cobrar ahora (de ${money(c.saldo)})" value="${montoParcial}" oninput="cobranzaSetMontoParcial('${c.id}', this.value)" onblur="cobranzaRenderComprobantes()" class="alta-input" style="margin-top:6px">` : ''}
+          ${esParcial ? `<input type="number" step="0.01" min="0.01" max="${c.saldo}" placeholder="Monto a cobrar ahora (de ${money(c.saldo)})" value="${montoParcial}" oninput="cobranzaSetMontoParcial('${c.id}', this.value)" class="alta-input" style="margin-top:6px">` : ''}
         </div>` : ''}
       </div>`;
     }).join('');
@@ -4571,13 +4604,13 @@ function cobranzaSetMontoParcial(id, valor){
 }
 
 function cobranzaToggleTodosComprobantes(){
-  const lista = cobranzaComprobantesDisponibles;
-  const todosSeleccionados = lista.every(function(c){ return cobranzaSeleccionados.has(c.id); });
+  const listaFiltrada = cobranzaComprobantesFiltrados();
+  if(!listaFiltrada.length) return;
+  const todosSeleccionados = listaFiltrada.every(function(c){ return cobranzaSeleccionados.has(c.id); });
   if(todosSeleccionados){
-    cobranzaSeleccionados = new Set();
-    cobranzaMontosParciales = new Map();
+    listaFiltrada.forEach(function(c){ cobranzaSeleccionados.delete(c.id); cobranzaMontosParciales.delete(c.id); });
   } else {
-    lista.forEach(function(c){ cobranzaSeleccionados.add(c.id); });
+    listaFiltrada.forEach(function(c){ cobranzaSeleccionados.add(c.id); });
   }
   cobranzaRenderComprobantes();
 }
@@ -4697,9 +4730,15 @@ function cobranzaDentroDeTolerancia(esperado, registrado){
 }
 
 function cobranzaBotonFoto(arr, i, c){
-  return `<span class="cwiz-foto-btn" data-foto-arr="${arr}" data-foto-idx="${i}" style="font-size:17px;cursor:pointer;align-self:center" title="${c.foto_path?'Ver foto':'Adjuntar foto (respaldo)'}">${c.foto_path?'📷✓':'📷'}</span>
-    ${c.foto_path?`<span class="cwiz-foto-retake-btn" data-foto-arr="${arr}" data-foto-idx="${i}" style="font-size:14px;cursor:pointer;align-self:center;color:#1a73e8" title="Reemplazar foto">↺</span>`:''}
-    <input type="file" accept="image/*" id="cwiz-foto-${arr}-${i}" data-foto-arr="${arr}" data-foto-idx="${i}" style="display:none">`;
+  if(c.foto_path){
+    return `<span class="cwiz-foto-btn" data-foto-arr="${arr}" data-foto-idx="${i}" style="font-size:17px;cursor:pointer;align-self:center" title="Ver foto">📷✓</span>
+      <span class="cwiz-foto-retake-btn" data-foto-arr="${arr}" data-foto-idx="${i}" style="font-size:14px;cursor:pointer;align-self:center;color:#1a73e8" title="Reemplazar foto">↺</span>
+      <input type="file" accept="image/*" id="cwiz-foto-gal-${arr}-${i}" data-foto-arr="${arr}" data-foto-idx="${i}" style="display:none">`;
+  }
+  return `<span class="cwiz-foto-cam-btn" data-foto-arr="${arr}" data-foto-idx="${i}" style="font-size:17px;cursor:pointer;align-self:center" title="Tomar foto">📷</span>
+    <span class="cwiz-foto-gal-btn" data-foto-arr="${arr}" data-foto-idx="${i}" style="font-size:16px;cursor:pointer;align-self:center" title="Elegir de galería">🖼️</span>
+    <input type="file" accept="image/*" capture="environment" id="cwiz-foto-cam-${arr}-${i}" data-foto-arr="${arr}" data-foto-idx="${i}" style="display:none">
+    <input type="file" accept="image/*" id="cwiz-foto-gal-${arr}-${i}" data-foto-arr="${arr}" data-foto-idx="${i}" style="display:none">`;
 }
 
 function cobranzaFilaValor(arr, i, c, placeholderMonto, placeholderExtra, campoExtra){
@@ -4752,6 +4791,29 @@ function cobranzaAgregarRetencion(){
   cobranzaRenderWizard();
 }
 
+function cobranzaActualizarTotalesWizardUI(){
+  const s = cobranzaWizardState;
+  if(!s) return;
+  const totalEsperado = cobranzaTotalComprobantesSeleccionados();
+  const totalRegistrado = cobranzaTotalRegistrado();
+  const diff = totalEsperado - totalRegistrado;
+  const coincide = cobranzaDentroDeTolerancia(totalEsperado, totalRegistrado);
+
+  const totalEl = document.getElementById('cwiz-total-registrado');
+  if(totalEl) totalEl.textContent = money(totalRegistrado);
+  const diffEl = document.getElementById('cwiz-diferencia');
+  if(diffEl){
+    diffEl.textContent = money(diff)+(diff>0?' (a favor del cliente)':(coincide?' (coincide)':' (no coincide)'));
+    diffEl.style.color = diff>0?'#1a73e8':(coincide?'#188038':'#ea4335');
+  }
+  const btn = document.getElementById('cobranza-wizard-generar');
+  if(btn){
+    btn.disabled = !coincide;
+    btn.style.opacity = coincide?'1':'.5';
+    btn.textContent = coincide?'Generar Recibo':'Falta cobrar para llegar al mínimo admitido';
+  }
+}
+
 function cobranzaRenderWizard(){
   const s = cobranzaWizardState;
   if(!s) return;
@@ -4781,7 +4843,7 @@ function cobranzaRenderWizard(){
             <span style="font-size:12.5px;color:#202124">${money(denom)}</span>
             <input type="number" min="0" inputmode="numeric" data-denom="${denom}" value="${s.efectivo_billetes[denom]||''}" placeholder="0" style="width:70px;text-align:right;padding:5px 8px;border:1px solid #e8eaed;border-radius:6px;font-size:12.5px">
           </div>`; }).join('')}
-        <div style="padding-top:8px;font-size:12.5px;font-weight:700;color:#202124;display:flex;justify-content:space-between"><span>Total efectivo</span><span>${money(s.efectivo)}</span></div>
+        <div style="padding-top:8px;font-size:12.5px;font-weight:700;color:#202124;display:flex;justify-content:space-between"><span>Total efectivo</span><span id="cwiz-total-efectivo-billetes">${money(s.efectivo)}</span></div>
       </div>
     ` : `
       <input type="number" id="cwiz-efectivo" class="alta-input" placeholder="0" step="0.01" inputmode="decimal" value="${s.efectivo}">
@@ -4807,25 +4869,39 @@ function cobranzaRenderWizard(){
     <textarea id="cwiz-comentario-interno" class="alta-input" rows="2" placeholder="Ej: cliente pagó de más, queda a favor" style="resize:vertical">${s.comentario_interno||''}</textarea>
 
     <div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-top:8px">
-      <div style="display:flex;justify-content:space-between;font-size:12.5px;color:#5f6368"><span>Total registrado</span><b>${money(totalRegistrado)}</b></div>
-      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:4px"><span>Diferencia</span><b style="color:${diff>0?'#1a73e8':(coincide?'#188038':'#ea4335')}">${money(diff)}${diff>0?' (a favor del cliente)':(coincide?' (coincide)':' (no coincide)')}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;color:#5f6368"><span>Total registrado</span><b id="cwiz-total-registrado">${money(totalRegistrado)}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:4px"><span>Diferencia</span><b id="cwiz-diferencia" style="color:${diff>0?'#1a73e8':(coincide?'#188038':'#ea4335')}">${money(diff)}${diff>0?' (a favor del cliente)':(coincide?' (coincide)':' (no coincide)')}</b></div>
     </div>
 
     <div id="cobranza-wizard-error" style="display:none;background:#fce8e6;color:#c5221f;border-radius:8px;padding:10px 12px;font-size:12px;margin-top:12px;white-space:pre-line"></div>
     <button id="cobranza-wizard-generar" onclick="cobranzaGenerarRecibo()" style="width:100%;margin-top:14px;background:#0d652d;color:#fff;border:none;border-radius:8px;padding:12px;font-weight:700;font-size:13px;cursor:pointer${coincide?'':';opacity:.5'}" ${coincide?'':'disabled'}>${coincide?'Generar Recibo':'Falta cobrar para llegar al mínimo admitido'}</button>
   `;
 
+  // IMPORTANTE: acá abajo ningún input dispara un reconstrucción completa del
+  // HTML (cobranzaRenderWizard) al perder el foco — eso fue justamente lo que
+  // causaba el bug de "hay que tocar dos veces" (si tocabas 📷 justo después
+  // de escribir un monto, el blur reconstruía todo el formulario ANTES de que
+  // el click en el ícono llegara a completarse, y el ícono viejo ya no
+  // existía). Ahora cada input solo actualiza su propio dato y refresca el
+  // cartel de totales de abajo (cobranzaActualizarTotalesWizardUI), sin tocar
+  // el resto del formulario. Los únicos casos que sí reconstruyen todo son
+  // acciones explícitas de botón (agregar/quitar fila, cambiar modo de
+  // efectivo) — ahí no hay foco de por medio, así que no hay conflicto.
   if(s.efectivo_modo==='billetes'){
     el.querySelectorAll('[data-denom]').forEach(function(inp){
       inp.oninput = function(){
         s.efectivo_billetes[this.dataset.denom] = this.value;
         s.efectivo = cobranzaCalcularTotalBilletes();
+        const tEl = document.getElementById('cwiz-total-efectivo-billetes');
+        if(tEl) tEl.textContent = money(s.efectivo);
+        cobranzaActualizarTotalesWizardUI();
       };
-      inp.onblur = cobranzaRenderWizard;
     });
   } else {
-    document.getElementById('cwiz-efectivo').oninput = function(){ s.efectivo = this.value; };
-    document.getElementById('cwiz-efectivo').onblur = cobranzaRenderWizard;
+    document.getElementById('cwiz-efectivo').oninput = function(){
+      s.efectivo = this.value;
+      cobranzaActualizarTotalesWizardUI();
+    };
   }
 
   document.getElementById('cwiz-comentario-interno').oninput = function(){ s.comentario_interno = this.value; };
@@ -4835,14 +4911,14 @@ function cobranzaRenderWizard(){
       inp.onchange = function(){
         const arr=this.dataset.arr, idx=this.dataset.idx, field=this.dataset.field;
         s[arr][idx][field] = this.value;
-        setTimeout(cobranzaRenderWizard, 0);
+        cobranzaActualizarTotalesWizardUI();
       };
     } else {
       inp.oninput = function(){
         const arr=this.dataset.arr, idx=this.dataset.idx, field=this.dataset.field;
         s[arr][idx][field] = this.value;
+        cobranzaActualizarTotalesWizardUI();
       };
-      inp.onblur = cobranzaRenderWizard;
     }
   });
   el.querySelectorAll('[data-rm]').forEach(function(span){
@@ -4853,24 +4929,26 @@ function cobranzaRenderWizard(){
     };
   });
 
-  // Foto de respaldo por valor (cheque/eCheq/transferencia/retención) — si ya
-  // tiene una, tocar el ícono la abre para verla; si no, abre el selector de
-  // archivo. El ícono "↺" (solo visible si ya hay foto) sirve para reemplazarla.
+  // Foto de respaldo por valor (cheque/eCheq/transferencia/retención): dos
+  // formas de cargarla (cámara directa o elegir de galería/archivos), y si ya
+  // tiene una, tocar el ✓ la abre para verla, con "↺" al lado para reemplazarla.
   el.querySelectorAll('.cwiz-foto-btn').forEach(function(btn){
     btn.onclick = function(){
       const arr = this.dataset.fotoArr, idx = this.dataset.fotoIdx;
       const item = s[arr][idx];
-      if(item.foto_path){
-        adminVerAdjunto(item.foto_path);
-      } else {
-        document.getElementById('cwiz-foto-'+arr+'-'+idx).click();
-      }
+      if(item.foto_path) adminVerAdjunto(item.foto_path);
     };
   });
-  el.querySelectorAll('.cwiz-foto-retake-btn').forEach(function(btn){
+  el.querySelectorAll('.cwiz-foto-cam-btn').forEach(function(btn){
     btn.onclick = function(){
       const arr = this.dataset.fotoArr, idx = this.dataset.fotoIdx;
-      document.getElementById('cwiz-foto-'+arr+'-'+idx).click();
+      document.getElementById('cwiz-foto-cam-'+arr+'-'+idx).click();
+    };
+  });
+  el.querySelectorAll('.cwiz-foto-gal-btn, .cwiz-foto-retake-btn').forEach(function(btn){
+    btn.onclick = function(){
+      const arr = this.dataset.fotoArr, idx = this.dataset.fotoIdx;
+      document.getElementById('cwiz-foto-gal-'+arr+'-'+idx).click();
     };
   });
   el.querySelectorAll('input[data-foto-arr]').forEach(function(input){
@@ -4878,8 +4956,6 @@ function cobranzaRenderWizard(){
       const file = e.target.files[0];
       if(!file) return;
       const arr = input.dataset.fotoArr, idx = input.dataset.fotoIdx;
-      const btn = el.querySelector('.cwiz-foto-btn[data-foto-arr="'+arr+'"][data-foto-idx="'+idx+'"]');
-      if(btn) btn.textContent = '⏳';
       try{
         const path = await cobranzaSubirFotoValor(file, arr);
         s[arr][idx].foto_path = path;
@@ -4887,7 +4963,6 @@ function cobranzaRenderWizard(){
       }catch(err){
         console.error('[cobranza foto]', err);
         alert('No se pudo subir la foto: '+(err.message||err));
-        if(btn) btn.textContent = '📷';
       }
     };
   });
@@ -7412,12 +7487,17 @@ async function adminCargarCobranzas(){
     el.innerHTML = lista.map(function(l){
       const r = l.resumen || {};
       const abierto = l.estado==='abierto';
-      return `<div style="background:#fff;border:1px solid ${abierto?'#f9ab00':'#e8eaed'};border-radius:10px;padding:14px 16px;margin-bottom:12px;cursor:pointer" onclick="adminVerLoteCobranzaModal('${l.id}')">
+      const rendido = l.estado==='rendido';
+      const colorBorde = abierto?'#f9ab00':(rendido?'#188038':'#e8eaed');
+      const badge = abierto ? '<span style="font-size:9px;font-weight:700;color:#fff;background:#f9ab00;border-radius:10px;padding:2px 8px">ABIERTO</span>'
+        : rendido ? '<span style="font-size:9px;font-weight:700;color:#fff;background:#188038;border-radius:10px;padding:2px 8px">RENDIDO</span>'
+        : '<span style="font-size:9px;font-weight:700;color:#fff;background:#5f6368;border-radius:10px;padding:2px 8px">CERRADO</span>';
+      return `<div style="background:#fff;border:1px solid ${colorBorde};border-radius:10px;padding:14px 16px;margin-bottom:12px;cursor:pointer" onclick="adminVerLoteCobranzaModal('${l.id}')">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
           <div>
             <div style="display:flex;align-items:center;gap:6px">
               <div style="font-size:13.5px;font-weight:700;color:#2c3e50">${l.numero_lote}</div>
-              ${abierto ? '<span style="font-size:9px;font-weight:700;color:#fff;background:#f9ab00;border-radius:10px;padding:2px 8px">ABIERTO</span>' : ''}
+              ${badge}
             </div>
             <div style="font-size:11px;color:#9aa0a6">${l.vendedor_nombre||''} (${l.vendedor_code||''}) · ${l.zona||''}</div>
           </div>
@@ -7426,7 +7506,7 @@ async function adminCargarCobranzas(){
             <div style="font-size:10px;color:#9aa0a6">${r.cantidad_recibos||0} recibo(s) · ${r.cantidad_clientes||0} cliente(s)</div>
           </div>
         </div>
-        <div style="font-size:10.5px;color:#9aa0a6;margin-top:6px">Abierto ${cobranzaFmtFechaHora(l.fecha_apertura)}${!abierto?(' · Cerrado '+cobranzaFmtFechaHora(l.fecha_cierre)):' · en curso'}</div>
+        <div style="font-size:10.5px;color:#9aa0a6;margin-top:6px">Abierto ${cobranzaFmtFechaHora(l.fecha_apertura)}${!abierto?(' · Cerrado '+cobranzaFmtFechaHora(l.fecha_cierre)):' · en curso'}${rendido?(' · Rendido '+cobranzaFmtFechaHora(l.fecha_rendicion)):''}</div>
       </div>`;
     }).join('');
   }catch(err){
@@ -7442,6 +7522,7 @@ function adminVerLoteCobranzaModal(id){
   const r = l.resumen || {};
   let html = `<div style="font-size:12px;color:#5f6368;margin-bottom:10px">
     Abierto: ${cobranzaFmtFechaHora(l.fecha_apertura)}<br>Cerrado: ${cobranzaFmtFechaHora(l.fecha_cierre)}
+    ${l.estado==='rendido' ? `<br><span style="color:#188038;font-weight:700">✅ Rendido en el ERP: ${cobranzaFmtFechaHora(l.fecha_rendicion)}${l.rendido_por?(' por '+l.rendido_por):''}</span>` : ''}
   </div>
   <div style="background:#f8f9fa;border-radius:8px;padding:12px;margin-bottom:14px">
     <div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>Efectivo cobrado</span><b>${money(r.total_efectivo||0)}</b></div>
@@ -7476,8 +7557,34 @@ function adminVerLoteCobranzaModal(id){
       </div>`;
     });
   }
+  if(r.comentarios && r.comentarios.length){
+    html += '<div style="font-size:10.5px;font-weight:800;color:#5f6368;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px">📝 Comentarios del vendedor</div>';
+    r.comentarios.forEach(function(c){
+      html += `<div style="background:#fef7e0;border-radius:8px;padding:8px 10px;margin-bottom:6px">
+        <div style="font-size:10.5px;color:#7a5c00;font-weight:700">${c.numero_recibo||''} · ${c.cliente_nombre||''}</div>
+        <div style="font-size:12px;color:#5f6368;margin-top:2px">${c.texto}</div>
+      </div>`;
+    });
+  }
+  if(l.estado==='cerrado'){
+    html += `<button onclick="adminMarcarLoteRendido('${l.id}')" style="width:100%;margin-top:16px;padding:11px;border:none;background:#188038;color:#fff;border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer">✅ Marcar como rendido en el ERP</button>`;
+  }
   document.getElementById('admin-cobranza-lote-content').innerHTML = html;
   document.getElementById('admin-cobranza-lote-modal').style.display = 'flex';
+}
+
+async function adminMarcarLoteRendido(id){
+  if(!confirm('¿Marcar este lote como rendido en el ERP? Esto es solo para tu control interno, no cambia nada del lado del vendedor.')) return;
+  try{
+    const { db, doc, setDoc, serverTimestamp } = window.fb;
+    await setDoc(doc(db,'lotes_cobranza',id), { estado:'rendido', fecha_rendicion: serverTimestamp(), rendido_por: currentAdmin||'' }, {merge:true});
+    document.getElementById('admin-cobranza-lote-modal').style.display = 'none';
+    await adminCargarCobranzas();
+    adminShowToast('✅ Lote marcado como rendido.');
+  }catch(err){
+    console.error('[adminMarcarLoteRendido]', err);
+    alert('Error al marcar como rendido: '+(err.message||err));
+  }
 }
 
 async function adminExportCobranzasExcel(){
@@ -7545,6 +7652,67 @@ async function adminExportCobranzasExcel(){
     if(aoaRecibos.length>1){
       const wsRecibos = XLSX.utils.aoa_to_sheet(aoaRecibos);
       XLSX.utils.book_append_sheet(wb, wsRecibos, 'Recibos');
+    }
+
+    // Cuarta hoja: TODOS los lotes rendidos hasta ahora (sin importar el filtro
+    // que tengas puesto en pantalla) — pensada como control histórico de
+    // rendición, no depende de qué estés mirando en este momento.
+    const { db, collection, getDocs, query, where } = window.fb;
+    const snapRendidos = await getDocs(query(collection(db,'lotes_cobranza'), where('estado','==','rendido')));
+    const lotesRendidos = [];
+    snapRendidos.forEach(function(d){ lotesRendidos.push(Object.assign({id:d.id}, d.data())); });
+    if(lotesRendidos.length){
+      lotesRendidos.sort(function(a,b){
+        const ta = a.fecha_rendicion && a.fecha_rendicion.toMillis ? a.fecha_rendicion.toMillis() : 0;
+        const tb = b.fecha_rendicion && b.fecha_rendicion.toMillis ? b.fecha_rendicion.toMillis() : 0;
+        return tb-ta;
+      });
+      const headerRendidos = ['Lote','Vendedor','Código vendedor','Zona','Fecha apertura','Fecha cierre','Fecha rendición','Rendido por',
+        'Recibos','Clientes','Total cobrado'];
+      const aoaRendidos = [headerRendidos];
+      lotesRendidos.forEach(function(l){
+        const r = l.resumen || {};
+        aoaRendidos.push([
+          l.numero_lote, l.vendedor_nombre||'', l.vendedor_code||'', l.zona||'',
+          cobranzaFmtFechaHora(l.fecha_apertura), cobranzaFmtFechaHora(l.fecha_cierre), cobranzaFmtFechaHora(l.fecha_rendicion), l.rendido_por||'',
+          r.cantidad_recibos||0, r.cantidad_clientes||0, r.total_cobrado||0
+        ]);
+      });
+      const wsRendidos = XLSX.utils.aoa_to_sheet(aoaRendidos);
+      XLSX.utils.book_append_sheet(wb, wsRendidos, 'Rendidos');
+    }
+
+    // Quinta hoja: una fila por cada foto adjunta a un valor de cobranza
+    // (cheque/eCheq/transferencia/retención), con el LINK DE DESCARGA real
+    // (no la ruta interna de Storage) — hay que pedirle ese link a Firebase
+    // por cada foto, así que si hay muchas puede tardar un ratito.
+    const itemsConFoto = [];
+    activos.forEach(function(r){
+      (r.cheques||[]).forEach(function(c){ if(c.foto_path) itemsConFoto.push({r, tipo:'Cheque', monto:c.monto, ref:c.numero||'', fecha:'', path:c.foto_path}); });
+      (r.echeqs||[]).forEach(function(c){ if(c.foto_path) itemsConFoto.push({r, tipo:'eCheq', monto:c.monto, ref:c.numero||'', fecha:'', path:c.foto_path}); });
+      (r.transferencias||[]).forEach(function(c){ if(c.foto_path) itemsConFoto.push({r, tipo:'Transferencia', monto:c.monto, ref:c.referencia||'', fecha:c.fecha||'', path:c.foto_path}); });
+      (r.retenciones||[]).forEach(function(c){ if(c.foto_path) itemsConFoto.push({r, tipo:'Retención '+c.tipo, monto:c.monto, ref:c.numero||'', fecha:'', path:c.foto_path}); });
+    });
+    if(itemsConFoto.length){
+      adminShowToast('Generando '+itemsConFoto.length+' link(s) de foto para el Excel...');
+      const { storage, ref: storageRef, getDownloadURL } = window.fb;
+      const headerFotos = ['Lote','Vendedor','Cliente','Recibo','Tipo','Monto','Referencia/N°','Fecha','Link de descarga'];
+      const aoaFotos = [headerFotos];
+      for(const item of itemsConFoto){
+        let link = '';
+        try{
+          link = await getDownloadURL(storageRef(storage, item.path));
+        }catch(err){
+          console.error('[adminExportCobranzasExcel] link foto', err);
+          link = '(no se pudo generar el link)';
+        }
+        aoaFotos.push([
+          item.r.numero_lote, item.r.vendedor_code||'', item.r.cliente_id||'', item.r.numero_recibo||'',
+          item.tipo, item.monto||0, item.ref, item.fecha, link
+        ]);
+      }
+      const wsFotos = XLSX.utils.aoa_to_sheet(aoaFotos);
+      XLSX.utils.book_append_sheet(wb, wsFotos, 'Fotos');
     }
 
     const ts = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
@@ -9561,7 +9729,8 @@ function supRenderHelados(data){
       <div>
         <label style="font-size:9.5px;color:#5f6368;font-weight:700;display:block;margin-bottom:2px">Estado</label>
         <select id="admin-cobranza-estado" onchange="adminCargarCobranzas()" style="font-size:11.5px;padding:6px 8px;border:1px solid #dadce0;border-radius:6px">
-          <option value="cerrado">Cerrados</option>
+          <option value="cerrado">Cerrados (sin rendir)</option>
+          <option value="rendido">Rendidos</option>
           <option value="abierto">Abiertos</option>
           <option value="todos">Todos</option>
         </select>
