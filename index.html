@@ -3593,6 +3593,7 @@ var cobranzaLoteActual = null;
 var cobranzaClienteSel = null;
 var cobranzaComprobantesDisponibles = [];
 var cobranzaSeleccionados = new Set();
+var cobranzaMontosParciales = new Map(); // id de comprobante -> monto parcial ingresado (solo los marcados como parcial)
 var cobranzaWizardState = null;
 var cobranzaRecibiendoOrigen = 'cobranza';
 var cobranzaLoteViendoActual = null;
@@ -4010,13 +4011,31 @@ async function cobranzaCerrarLote(){
   btn.disabled = true; btn.textContent = 'Cerrando...';
 
   try{
-    const { db, collection, getDocs, query, where, doc, setDoc, serverTimestamp } = window.fb;
+    const { db, collection, getDocs, query, where, doc, setDoc, writeBatch, serverTimestamp } = window.fb;
     const q = query(collection(db,'recibos_cobranza'), where('lote_id','==',l.id));
     const snap = await getDocs(q);
     const recibos = [];
     snap.forEach(function(d){ recibos.push(Object.assign({id:d.id}, d.data())); });
 
     const resumen = cobranzaCalcularResumenDeLote(recibos, l.gastos);
+
+    // Recién ahora que el lote se cierra (se rinde) resolvemos el destino final
+    // de cada comprobante: los que se cobraron completos quedan "cobrado" para
+    // siempre; los que quedaron con pago parcial vuelven a "disponible" con el
+    // saldo restante, para poder seguir cobrándolos más adelante.
+    const batchComp = writeBatch(db);
+    let huboComprobantes = false;
+    recibos.filter(function(r){ return r.estado!=='anulado'; }).forEach(function(r){
+      (r.comprobantes||[]).forEach(function(c){
+        huboComprobantes = true;
+        if(c.parcial){
+          batchComp.set(doc(db,'comprobantes_pendientes',c.id), { estado:'disponible', saldo: c.saldo_restante, recibo_id: null }, {merge:true});
+        } else {
+          batchComp.set(doc(db,'comprobantes_pendientes',c.id), { estado:'cobrado' }, {merge:true});
+        }
+      });
+    });
+    if(huboComprobantes) await batchComp.commit();
 
     await setDoc(doc(db,'lotes_cobranza',l.id), { estado:'cerrado', fecha_cierre: serverTimestamp(), resumen: resumen }, {merge:true});
 
@@ -4239,10 +4258,11 @@ async function cobranzaRenderRecibo(){
 
   const anulado = r.estado==='anulado';
   const filasComprobantes = (r.comprobantes||[]).map(function(c){
+    const montoCobrado = c.monto_cobrado!=null ? c.monto_cobrado : c.saldo;
     return `<tr>
       <td style="padding:4px 6px;font-size:11px;border-bottom:1px solid #f1f3f4">${c.fecha_vencimiento||'—'}</td>
-      <td style="padding:4px 6px;font-size:11px;border-bottom:1px solid #f1f3f4">${c.tipo||''} ${c.sucursal||''}-${c.numero||''}</td>
-      <td style="padding:4px 6px;font-size:11px;border-bottom:1px solid #f1f3f4;text-align:right">${money(c.saldo)}</td>
+      <td style="padding:4px 6px;font-size:11px;border-bottom:1px solid #f1f3f4">${c.tipo||''} ${c.sucursal||''}-${c.numero||''}${c.parcial?' <span style="color:#f9ab00;font-weight:700">(parcial)</span>':''}</td>
+      <td style="padding:4px 6px;font-size:11px;border-bottom:1px solid #f1f3f4;text-align:right">${money(montoCobrado)}${c.parcial?`<div style="font-size:9.5px;color:#9aa0a6">de ${money(c.saldo)} · resta ${money(c.saldo_restante)}</div>`:''}</td>
     </tr>`;
   }).join('');
 
@@ -4291,6 +4311,10 @@ async function cobranzaRenderRecibo(){
       <div style="font-size:12px;font-weight:800;color:#202124;letter-spacing:1px">${r.hash_verificacion||''}</div>
       <div style="font-size:10.5px;color:#9aa0a6;margin-top:8px">${r.vendedor_nombre||''} (${r.vendedor_code||''}) · ${r.numero_lote||''}</div>
     </div>
+    ${r.comentario_interno ? `<div style="background:#fef7e0;border-radius:10px;padding:12px 14px;margin-top:14px">
+      <div style="font-size:9.5px;color:#7a5c00;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">📝 Comentario interno (no va en el PDF)</div>
+      <div style="font-size:12px;color:#5f6368">${r.comentario_interno}</div>
+    </div>` : ''}
   `;
 
   const loteDelRecibo = (cobranzaLoteActual && cobranzaLoteActual.id===r.lote_id) ? cobranzaLoteActual
@@ -4365,9 +4389,10 @@ async function cobranzaConstruirReciboPDF(){
   docPdf.setDrawColor(200); docPdf.line(margin, y, pageW-margin, y); y+=5;
   docPdf.setFont('helvetica','normal'); docPdf.setFontSize(9.5);
   (r.comprobantes||[]).forEach(function(c){
+    const montoCobrado = c.monto_cobrado!=null ? c.monto_cobrado : c.saldo;
     docPdf.text(c.fecha_vencimiento||'—', margin, y);
-    docPdf.text((c.tipo||'')+' '+(c.sucursal||'')+'-'+(c.numero||''), margin+35, y);
-    docPdf.text(money(c.saldo), pageW-margin, y, {align:'right'});
+    docPdf.text((c.tipo||'')+' '+(c.sucursal||'')+'-'+(c.numero||'')+(c.parcial?' (parcial, de '+money(c.saldo)+')':''), margin+35, y);
+    docPdf.text(money(montoCobrado), pageW-margin, y, {align:'right'});
     y+=5;
   });
   y+=2;
@@ -4469,6 +4494,7 @@ async function cobranzaSeleccionarCliente(id){
   if(!r) return;
   cobranzaClienteSel = r;
   cobranzaSeleccionados = new Set();
+  cobranzaMontosParciales = new Map();
   document.getElementById('cobranza-cliente-nombre').textContent = r.n||'';
   document.getElementById('cobranza-cliente-id').textContent = 'ID '+r.id+' · '+(r.canal||'');
   document.getElementById('cobranza-paso-buscar').style.display='none';
@@ -4503,18 +4529,43 @@ function cobranzaRenderComprobantes(){
       const activo = cobranzaSeleccionados.has(c.id);
       const esNC = String(c.tipo||'').toUpperCase().indexOf('NC')===0;
       const esNegativo = Number(c.saldo)<0;
-      return `<div onclick="cobranzaToggleComprobante('${c.id}')" style="background:#fff;border:1.5px solid ${activo?'#0d652d':(esNC?'#f9ab00':'#e8eaed')};border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;gap:10px">
-        <div style="width:20px;height:20px;border-radius:5px;border:2px solid ${activo?'#0d652d':'#c4c7c5'};background:${activo?'#0d652d':'#fff'};display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;font-size:13px;font-weight:800">${activo?'✓':''}</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:12.5px;font-weight:700;color:#202124">${c.tipo||''} ${c.sucursal||''}-${c.numero||''} ${esNC?'<span style="font-size:9px;font-weight:800;color:#fff;background:#f9ab00;border-radius:8px;padding:1px 6px;margin-left:4px">NOTA DE CRÉDITO</span>':''}</div>
-          <div style="font-size:10.5px;color:#9aa0a6">Vence ${c.fecha_vencimiento||'—'} · ${c.dias_vencidos>0?c.dias_vencidos+' días vencido':'al día'}${c.vendedor_code && c.vendedor_code!==getVendorCode() ? ' · vend. '+c.vendedor_code : ''}</div>
+      const esParcial = cobranzaMontosParciales.has(c.id);
+      const montoParcial = esParcial ? cobranzaMontosParciales.get(c.id) : '';
+      return `<div style="background:#fff;border:1.5px solid ${activo?'#0d652d':(esNC?'#f9ab00':'#e8eaed')};border-radius:10px;padding:10px 12px;margin-bottom:8px">
+        <div onclick="cobranzaToggleComprobante('${c.id}')" style="cursor:pointer;display:flex;align-items:center;gap:10px">
+          <div style="width:20px;height:20px;border-radius:5px;border:2px solid ${activo?'#0d652d':'#c4c7c5'};background:${activo?'#0d652d':'#fff'};display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;font-size:13px;font-weight:800">${activo?'✓':''}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12.5px;font-weight:700;color:#202124">${c.tipo||''} ${c.sucursal||''}-${c.numero||''} ${esNC?'<span style="font-size:9px;font-weight:800;color:#fff;background:#f9ab00;border-radius:8px;padding:1px 6px;margin-left:4px">NOTA DE CRÉDITO</span>':''}</div>
+            <div style="font-size:10.5px;color:#9aa0a6">Vence ${c.fecha_vencimiento||'—'} · ${c.dias_vencidos>0?c.dias_vencidos+' días vencido':'al día'}${c.vendedor_code && c.vendedor_code!==getVendorCode() ? ' · vend. '+c.vendedor_code : ''}</div>
+          </div>
+          <span onclick="event.stopPropagation(); cobranzaVerDetalleComprobante('${c.id}')" style="font-size:16px;padding:4px;flex-shrink:0;cursor:pointer" title="Ver qué mercadería compone este comprobante">👁</span>
+          <div style="text-align:right;white-space:nowrap">
+            <div style="font-size:13px;font-weight:800;color:${esNegativo?'#ea4335':'#202124'}">${esParcial?money(montoParcial):money(c.saldo)}</div>
+            ${esParcial?`<div style="font-size:9px;color:#f9ab00;font-weight:700">parcial de ${money(c.saldo)}</div>`:''}
+          </div>
         </div>
-        <span onclick="event.stopPropagation(); cobranzaVerDetalleComprobante('${c.id}')" style="font-size:16px;padding:4px;flex-shrink:0;cursor:pointer" title="Ver qué mercadería compone este comprobante">👁</span>
-        <div style="font-size:13px;font-weight:800;color:${esNegativo?'#ea4335':'#202124'};white-space:nowrap">${money(c.saldo)}</div>
+        ${activo && !esNegativo ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid #f1f3f4" onclick="event.stopPropagation()">
+          <label style="font-size:11px;color:#5f6368;display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" ${esParcial?'checked':''} onchange="cobranzaTogglePagoParcial('${c.id}', this.checked)">
+            Cobro parcial de este comprobante
+          </label>
+          ${esParcial ? `<input type="number" step="0.01" min="0.01" max="${c.saldo}" placeholder="Monto a cobrar ahora (de ${money(c.saldo)})" value="${montoParcial}" oninput="cobranzaSetMontoParcial('${c.id}', this.value)" onblur="cobranzaRenderComprobantes()" class="alta-input" style="margin-top:6px">` : ''}
+        </div>` : ''}
       </div>`;
     }).join('');
     el.innerHTML = html;
   }
+  cobranzaActualizarTotal();
+}
+
+function cobranzaTogglePagoParcial(id, marcado){
+  if(marcado) cobranzaMontosParciales.set(id, '');
+  else cobranzaMontosParciales.delete(id);
+  cobranzaRenderComprobantes();
+}
+
+function cobranzaSetMontoParcial(id, valor){
+  cobranzaMontosParciales.set(id, valor);
   cobranzaActualizarTotal();
 }
 
@@ -4523,6 +4574,7 @@ function cobranzaToggleTodosComprobantes(){
   const todosSeleccionados = lista.every(function(c){ return cobranzaSeleccionados.has(c.id); });
   if(todosSeleccionados){
     cobranzaSeleccionados = new Set();
+    cobranzaMontosParciales = new Map();
   } else {
     lista.forEach(function(c){ cobranzaSeleccionados.add(c.id); });
   }
@@ -4575,9 +4627,13 @@ function cobranzaToggleComprobante(id){
   cobranzaRenderComprobantes();
 }
 
+function cobranzaMontoDeComprobante(c){
+  if(cobranzaMontosParciales.has(c.id)) return Number(cobranzaMontosParciales.get(c.id))||0;
+  return Number(c.saldo)||0;
+}
+
 function cobranzaActualizarTotal(){
-  let total = 0;
-  cobranzaComprobantesDisponibles.forEach(function(c){ if(cobranzaSeleccionados.has(c.id)) total += Number(c.saldo)||0; });
+  const total = cobranzaTotalComprobantesSeleccionados();
   document.getElementById('cobranza-total-seleccionado').textContent = money(total);
   const btn = document.getElementById('cobranza-btn-continuar');
   btn.disabled = cobranzaSeleccionados.size===0;
@@ -4588,17 +4644,28 @@ function cobranzaVolverBuscar(){
   document.getElementById('cobranza-paso-comprobantes').style.display='none';
   document.getElementById('cobranza-paso-buscar').style.display='block';
   cobranzaClienteSel = null;
+  cobranzaMontosParciales = new Map();
 }
 
 function cobranzaTotalComprobantesSeleccionados(){
   let total = 0;
-  cobranzaComprobantesDisponibles.forEach(function(c){ if(cobranzaSeleccionados.has(c.id)) total += Number(c.saldo)||0; });
+  cobranzaComprobantesDisponibles.forEach(function(c){ if(cobranzaSeleccionados.has(c.id)) total += cobranzaMontoDeComprobante(c); });
   return total;
 }
 
 function cobranzaContinuar(){
   if(!cobranzaSeleccionados.size) return;
-  cobranzaWizardState = { efectivo:'', efectivo_modo:'total', efectivo_billetes:{}, cheques:[], echeqs:[], transferencias:[], retenciones:[] };
+  // Validar los montos parciales antes de dejar avanzar al wizard
+  for(const c of cobranzaComprobantesDisponibles){
+    if(!cobranzaSeleccionados.has(c.id)) continue;
+    if(!cobranzaMontosParciales.has(c.id)) continue;
+    const monto = Number(cobranzaMontosParciales.get(c.id));
+    if(!monto || monto<=0 || monto>=Number(c.saldo)){
+      alert('El monto parcial de '+c.tipo+' '+c.sucursal+'-'+c.numero+' tiene que ser mayor a $0 y menor al saldo total ('+money(c.saldo)+'). Si querés cobrarlo completo, destildá "Cobro parcial".');
+      return;
+    }
+  }
+  cobranzaWizardState = { efectivo:'', efectivo_modo:'total', efectivo_billetes:{}, cheques:[], echeqs:[], transferencias:[], retenciones:[], comentario_interno:'' };
   document.getElementById('cobranza-wizard-cliente').textContent = (cobranzaClienteSel.n||'')+' · ID '+cobranzaClienteSel.id;
   switchTab('cobranza-wizard');
   cobranzaRenderWizard();
@@ -4622,7 +4689,10 @@ function cobranzaTotalRegistrado(){
 }
 
 function cobranzaDentroDeTolerancia(esperado, registrado){
-  return Math.abs(esperado-registrado) < 1; // margen de $1 por redondeos
+  const diferencia = registrado - esperado;
+  if(diferencia >= 0) return true; // cobrar de más siempre se permite (queda como saldo a favor del cliente)
+  const tolerancia = Math.max(1, Math.abs(esperado) * 0.03);
+  return Math.abs(diferencia) <= tolerancia;
 }
 
 function cobranzaFilaValor(arr, i, c, placeholderMonto, placeholderExtra, campoExtra){
@@ -4723,13 +4793,16 @@ function cobranzaRenderWizard(){
     <div id="cwiz-retenciones-list">${s.retenciones.map(function(r,i){ return cobranzaFilaRetencion(i,r); }).join('')}</div>
     <div onclick="cobranzaAgregarRetencion()" style="color:#1a73e8;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px">+ Agregar retención</div>
 
+    <label class="alta-lbl">Comentario interno (opcional — no aparece en el PDF del cliente)</label>
+    <textarea id="cwiz-comentario-interno" class="alta-input" rows="2" placeholder="Ej: cliente pagó de más, queda a favor" style="resize:vertical">${s.comentario_interno||''}</textarea>
+
     <div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-top:8px">
       <div style="display:flex;justify-content:space-between;font-size:12.5px;color:#5f6368"><span>Total registrado</span><b>${money(totalRegistrado)}</b></div>
-      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:4px"><span>Diferencia</span><b style="color:${coincide?'#188038':'#ea4335'}">${money(diff)}${coincide?' (coincide)':' (no coincide)'}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-top:4px"><span>Diferencia</span><b style="color:${diff>0?'#1a73e8':(coincide?'#188038':'#ea4335')}">${money(diff)}${diff>0?' (a favor del cliente)':(coincide?' (coincide)':' (no coincide)')}</b></div>
     </div>
 
     <div id="cobranza-wizard-error" style="display:none;background:#fce8e6;color:#c5221f;border-radius:8px;padding:10px 12px;font-size:12px;margin-top:12px;white-space:pre-line"></div>
-    <button id="cobranza-wizard-generar" onclick="cobranzaGenerarRecibo()" style="width:100%;margin-top:14px;background:#0d652d;color:#fff;border:none;border-radius:8px;padding:12px;font-weight:700;font-size:13px;cursor:pointer${coincide?'':';opacity:.5'}" ${coincide?'':'disabled'}>${coincide?'Generar Recibo':'El total no coincide'}</button>
+    <button id="cobranza-wizard-generar" onclick="cobranzaGenerarRecibo()" style="width:100%;margin-top:14px;background:#0d652d;color:#fff;border:none;border-radius:8px;padding:12px;font-weight:700;font-size:13px;cursor:pointer${coincide?'':';opacity:.5'}" ${coincide?'':'disabled'}>${coincide?'Generar Recibo':'Falta cobrar para llegar al mínimo admitido'}</button>
   `;
 
   if(s.efectivo_modo==='billetes'){
@@ -4744,6 +4817,8 @@ function cobranzaRenderWizard(){
     document.getElementById('cwiz-efectivo').oninput = function(){ s.efectivo = this.value; };
     document.getElementById('cwiz-efectivo').onblur = cobranzaRenderWizard;
   }
+
+  document.getElementById('cwiz-comentario-interno').oninput = function(){ s.comentario_interno = this.value; };
 
   el.querySelectorAll('[data-arr]').forEach(function(inp){
     if(inp.tagName==='SELECT'){
@@ -4801,7 +4876,7 @@ async function cobranzaGenerarRecibo(){
   const totalEsperado = cobranzaTotalComprobantesSeleccionados();
   const totalRegistrado = cobranzaTotalRegistrado();
   if(!cobranzaDentroDeTolerancia(totalEsperado, totalRegistrado)){
-    errEl.style.display='block'; errEl.textContent='El total registrado no coincide con el total a cobrar.';
+    errEl.style.display='block'; errEl.textContent='Falta cobrar '+money(totalEsperado-totalRegistrado)+' para llegar al mínimo admitido (hasta 3% de diferencia, o revisá si algún comprobante debería marcarse como cobro parcial).';
     return;
   }
   for(const arr of ['cheques','echeqs','transferencias']){
@@ -4861,7 +4936,7 @@ async function cobranzaGenerarRecibo(){
     let efectivoAsignado = 0;
     sucursalesNecesarias.forEach(function(suc, idx){
       const comprobantesSuc = porSucursal[suc] || [];
-      const totalComprobantesSuc = comprobantesSuc.reduce(function(acc,c){ return acc+(Number(c.saldo)||0); }, 0);
+      const totalComprobantesSuc = comprobantesSuc.reduce(function(acc,c){ return acc+cobranzaMontoDeComprobante(c); }, 0);
       const esUltimo = idx===sucursalesNecesarias.length-1;
       let efectivoSuc;
       if(esUltimo){
@@ -4875,7 +4950,18 @@ async function cobranzaGenerarRecibo(){
       const esSuc3 = suc==='3';
       recibosAGenerar.push({
         sucursal: suc,
-        comprobantes: comprobantesSuc.map(function(c){ return {id:c.id, tipo:c.tipo, sucursal:c.sucursal, numero:c.numero, saldo:c.saldo, fecha_vencimiento:c.fecha_vencimiento}; }),
+        comprobantes: comprobantesSuc.map(function(c){
+          const esParcial = cobranzaMontosParciales.has(c.id);
+          const montoCobrado = cobranzaMontoDeComprobante(c);
+          return {
+            id:c.id, tipo:c.tipo, sucursal:c.sucursal, numero:c.numero,
+            saldo:c.saldo, // saldo ORIGINAL completo del comprobante (para referencia)
+            parcial: esParcial,
+            monto_cobrado: montoCobrado, // lo que efectivamente se cobra en este recibo
+            saldo_restante: esParcial ? Math.round((Number(c.saldo)-montoCobrado)*100)/100 : 0,
+            fecha_vencimiento:c.fecha_vencimiento
+          };
+        }),
         total_comprobantes: totalComprobantesSuc,
         efectivo: efectivoSuc,
         efectivo_modo: s.efectivo_modo,
@@ -4909,6 +4995,7 @@ async function cobranzaGenerarRecibo(){
         efectivo: r.efectivo, efectivo_modo: r.efectivo_modo, efectivo_billetes: r.efectivo_billetes,
         cheques: r.cheques, echeqs: r.echeqs, transferencias: r.transferencias, retenciones: r.retenciones,
         total_registrado: r.total_registrado,
+        comentario_interno: s.comentario_interno||'',
         estado: 'activo',
         fecha_hora: serverTimestamp(), fecha_hora_iso: fechaHoraIso,
         hash_verificacion: r.hash_verificacion
@@ -4922,6 +5009,7 @@ async function cobranzaGenerarRecibo(){
     await batch.commit();
 
     cobranzaSeleccionados = new Set();
+    cobranzaMontosParciales = new Map();
     cobranzaWizardState = null;
     cobranzaClienteSel = null;
     document.getElementById('cobranza-buscar').value='';
