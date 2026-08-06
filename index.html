@@ -3735,7 +3735,7 @@ async function cobranzaCargarRecibosLote(){
           <div style="font-size:12.5px;font-weight:700;color:#202124">${r.numero_recibo}</div>
           ${anulado ? '<span style="font-size:9px;font-weight:700;color:#fff;background:#ea4335;border-radius:10px;padding:2px 8px">ANULADO</span>' : ''}
         </div>
-        <div style="font-size:11px;color:#80868b">${r.cliente_nombre||''} · ${money(r.total_registrado)}</div>
+        <div style="font-size:11px;color:#80868b">${cobranzaEtiquetaCliente(r.cliente_id, r.cliente_nombre)} · ${money(r.total_registrado)}</div>
       </div>`;
     }).join('');
   }catch(err){
@@ -3758,6 +3758,10 @@ function cobranzaColorSemaforo(diasVencidos){
   if(d<=3) return '#f9ab00';      // amarillo: hasta 3 días
   if(d<=10) return '#f57c00';     // naranja: entre 4 y 10 días
   return '#ea4335';               // rojo: más de 10 días
+}
+
+function cobranzaEtiquetaCliente(id, nombre){
+  return (id!=null && id!=='' ? id : '—')+' — '+(nombre||'(sin nombre)');
 }
 
 function cobranzaFmtFechaHora(ts){
@@ -3831,7 +3835,7 @@ function cobranzaVolverASeguimiento(){
   cobranzaCargarSeguimiento();
 }
 
-const GASTOS_MOTIVOS = ['Adelanto de Sueldo','Billete Falso','Robo/Pérdida de Efectivo','Gasto Librería','Gasto Viático','Otro'];
+const GASTOS_MOTIVOS = ['Depósito Bancario/ATM','Adelanto de Sueldo','Billete Falso','Robo/Pérdida de Efectivo','Gasto Librería','Gasto Viático','Otro'];
 
 function cobranzaFilaGasto(i, g){
   return `<div style="border:1px solid #e8eaed;border-radius:8px;padding:8px;margin-bottom:8px">
@@ -3843,7 +3847,9 @@ function cobranzaFilaGasto(i, g){
       <span data-gasto-rm="${i}" style="color:#ea4335;font-size:20px;cursor:pointer;align-self:center;padding:0 4px">✕</span>
     </div>
     ${g.motivo==='Otro' ? `<input type="text" placeholder="Especificar motivo" data-gasto-idx="${i}" data-gasto-field="motivo_otro" value="${(g.motivo_otro||'').replace(/"/g,'&quot;')}" class="alta-input" style="margin-bottom:6px">` : ''}
-    <input type="text" placeholder="Comentario (opcional)" data-gasto-idx="${i}" data-gasto-field="comentario" value="${(g.comentario||'').replace(/"/g,'&quot;')}" class="alta-input">
+    ${g.motivo==='Depósito Bancario/ATM' ? `<label style="font-size:10px;color:#5f6368;font-weight:700;display:block;margin-bottom:2px">Fecha del depósito *</label>
+    <input type="date" data-gasto-idx="${i}" data-gasto-field="fecha_deposito" value="${g.fecha_deposito||''}" class="alta-input" style="margin-bottom:6px">` : ''}
+    <input type="text" placeholder="${g.motivo==='Depósito Bancario/ATM'?'Banco / N° de comprobante (opcional)':'Comentario (opcional)'}" data-gasto-idx="${i}" data-gasto-field="comentario" value="${(g.comentario||'').replace(/"/g,'&quot;')}" class="alta-input">
   </div>`;
 }
 
@@ -3939,7 +3945,7 @@ async function cobranzaRenderLoteDetalle(){
           <div style="font-size:12.5px;font-weight:700;color:#202124">${r.numero_recibo}${r.sucursal?(' <span style="color:#9aa0a6;font-weight:600">· Suc. '+r.sucursal+'</span>'):''}</div>
           ${anulado ? '<span style="font-size:9px;font-weight:700;color:#fff;background:#ea4335;border-radius:10px;padding:2px 8px">ANULADO</span>' : ''}
         </div>
-        <div style="font-size:11px;color:#80868b">${r.cliente_nombre||''} · ${money(r.total_registrado)}</div>
+        <div style="font-size:11px;color:#80868b">${cobranzaEtiquetaCliente(r.cliente_id, r.cliente_nombre)} · ${money(r.total_registrado)}</div>
       </div>`;
     });
   }
@@ -4025,6 +4031,13 @@ function cobranzaCalcularResumenDeLote(recibos, gastosLote){
 async function cobranzaCerrarLote(){
   const l = cobranzaLoteViendoActual;
   if(!l || l.estado!=='abierto') return;
+
+  const gastosSinFecha = (l.gastos||[]).filter(function(g){ return g.motivo==='Depósito Bancario/ATM' && Number(g.monto)>0 && !g.fecha_deposito; });
+  if(gastosSinFecha.length){
+    alert('Falta la fecha de depósito en '+gastosSinFecha.length+' registro(s) de "Depósito Bancario/ATM". Completala antes de cerrar el lote.');
+    return;
+  }
+
   if(!confirm('¿Cerrar el lote '+l.numero_lote+'? Una vez cerrado no se pueden anular más recibos de este lote, y no vas a poder cobrar más hasta abrir uno nuevo.')) return;
 
   const btn = document.getElementById('cobranza-btn-cerrar-lote');
@@ -4119,7 +4132,8 @@ async function cobranzaConstruirResumenLotePDF(){
     r.gastos.forEach(function(g){
       checkPage();
       const motivo = g.motivo==='Otro' ? ('Otro: '+(g.motivo_otro||'')) : g.motivo;
-      docPdf.text(motivo+(g.comentario?(' — '+g.comentario):''), margin, y);
+      const extra = [g.fecha_deposito?('fecha '+g.fecha_deposito):'', g.comentario].filter(Boolean).join(' — ');
+      docPdf.text(motivo+(extra?(' — '+extra):''), margin, y);
       docPdf.text(money(g.monto), pageW-margin, y, {align:'right'});
       y+=5;
     });
@@ -4145,7 +4159,7 @@ async function cobranzaConstruirResumenLotePDF(){
   docPdf.setFont('helvetica','normal'); docPdf.setFontSize(9.5);
   (r.clientes||[]).forEach(function(c){
     checkPage();
-    docPdf.text(c.cliente_nombre||('ID '+c.cliente_id), margin, y);
+    docPdf.text(cobranzaEtiquetaCliente(c.cliente_id, c.cliente_nombre), margin, y);
     docPdf.text(money(c.total), pageW-margin, y, {align:'right'});
     y+=5;
   });
@@ -4165,7 +4179,7 @@ async function cobranzaConstruirResumenLotePDF(){
     r.transferencias.forEach(function(t){
       checkPage();
       docPdf.text(t.fecha||'—', margin, y);
-      docPdf.text((t.cliente_nombre||'').slice(0,32), margin+22, y);
+      docPdf.text(cobranzaEtiquetaCliente(t.cliente_id, t.cliente_nombre).slice(0,32), margin+22, y);
       docPdf.text((t.referencia||'—').slice(0,20), margin+90, y);
       docPdf.text(money(t.monto), pageW-margin, y, {align:'right'});
       y+=5;
@@ -4306,8 +4320,7 @@ async function cobranzaRenderRecibo(){
 
     <div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-bottom:14px">
       <div style="font-size:9.5px;color:#9aa0a6;font-weight:800;text-transform:uppercase;letter-spacing:.5px">Recibimos de</div>
-      <div style="font-size:14px;font-weight:700;color:#202124">${r.cliente_nombre||''}</div>
-      <div style="font-size:11px;color:#80868b">ID ${r.cliente_id||''}</div>
+      <div style="font-size:14px;font-weight:700;color:#202124">${cobranzaEtiquetaCliente(r.cliente_id, r.cliente_nombre)}</div>
     </div>
 
     <div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-bottom:14px">
@@ -4397,9 +4410,7 @@ async function cobranzaConstruirReciboPDF(){
   }
 
   docPdf.setFont('helvetica','bold'); docPdf.setFontSize(10.5);
-  docPdf.text('Recibimos de: '+(r.cliente_nombre||''), margin, y); y+=6;
-  docPdf.setFont('helvetica','normal');
-  docPdf.text('Código de cliente: '+(r.cliente_id||''), margin, y); y+=9;
+  docPdf.text('Recibimos de: '+cobranzaEtiquetaCliente(r.cliente_id, r.cliente_nombre), margin, y); y+=9;
 
   docPdf.setFont('helvetica','bold'); docPdf.setFontSize(9.5);
   docPdf.text('Vence', margin, y);
@@ -4503,8 +4514,8 @@ function cobranzaBuscarCliente(){
   if(!resultados.length){ el.innerHTML = '<div style="text-align:center;color:#9aa0a6;font-size:12px;padding:10px">Sin resultados.</div>'; return; }
   el.innerHTML = resultados.slice(0,20).map(function(r){
     return '<div onclick="cobranzaSeleccionarCliente(\''+String(r.id).replace(/'/g,"\\'")+'\')" style="background:#fff;border:1px solid #e8eaed;border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer">'
-      +'<div style="font-size:13px;font-weight:700;color:#202124">'+(r.n||'')+'</div>'
-      +'<div style="font-size:11px;color:#80868b">ID '+r.id+' · '+(r.canal||'')+'</div>'
+      +'<div style="font-size:13px;font-weight:700;color:#202124">'+cobranzaEtiquetaCliente(r.id, r.n)+'</div>'
+      +'<div style="font-size:11px;color:#80868b">'+(r.canal||'')+'</div>'
       +'</div>';
   }).join('');
 }
@@ -4515,8 +4526,8 @@ async function cobranzaSeleccionarCliente(id){
   cobranzaClienteSel = r;
   cobranzaSeleccionados = new Set();
   cobranzaMontosParciales = new Map();
-  document.getElementById('cobranza-cliente-nombre').textContent = r.n||'';
-  document.getElementById('cobranza-cliente-id').textContent = 'ID '+r.id+' · '+(r.canal||'');
+  document.getElementById('cobranza-cliente-nombre').textContent = cobranzaEtiquetaCliente(r.id, r.n);
+  document.getElementById('cobranza-cliente-id').textContent = r.canal||'';
   document.getElementById('cobranza-paso-buscar').style.display='none';
   document.getElementById('cobranza-paso-comprobantes').style.display='block';
   // El buscador y el link "Seleccionar todos" se arman UNA sola vez acá (el
@@ -4736,7 +4747,7 @@ function cobranzaContinuar(){
     }
   }
   cobranzaWizardState = { efectivo:'', efectivo_modo:'total', efectivo_billetes:{}, cheques:[], echeqs:[], transferencias:[], retenciones:[], comentario_interno:'' };
-  document.getElementById('cobranza-wizard-cliente').textContent = (cobranzaClienteSel.n||'')+' · ID '+cobranzaClienteSel.id;
+  document.getElementById('cobranza-wizard-cliente').textContent = cobranzaEtiquetaCliente(cobranzaClienteSel.id, cobranzaClienteSel.n);
   switchTab('cobranza-wizard');
   cobranzaRenderWizard();
 }
@@ -7572,14 +7583,15 @@ function adminVerLoteCobranzaModal(id){
   </div>
   <div style="font-size:10.5px;font-weight:800;color:#5f6368;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Clientes</div>`;
   (r.clientes||[]).forEach(function(c){
-    html += `<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid #f1f3f4"><span>${c.cliente_nombre||('ID '+c.cliente_id)}</span><b>${money(c.total)}</b></div>`;
+    html += `<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid #f1f3f4"><span>${cobranzaEtiquetaCliente(c.cliente_id, c.cliente_nombre)}</span><b>${money(c.total)}</b></div>`;
   });
   if(r.gastos && r.gastos.length){
     html += '<div style="font-size:10.5px;font-weight:800;color:#5f6368;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px">Gastos</div>';
     r.gastos.forEach(function(g){
       const motivo = g.motivo==='Otro' ? ('Otro: '+(g.motivo_otro||'')) : g.motivo;
+      const extra = [g.fecha_deposito, g.comentario].filter(Boolean).join(' · ');
       html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;padding:5px 0;border-bottom:1px solid #f1f3f4">
-        <div><b>${motivo}</b>${g.comentario?(' · '+g.comentario):''}</div>
+        <div><b>${motivo}</b>${extra?(' · '+extra):''}</div>
         <div style="font-weight:700;color:#ea4335">-${money(g.monto)}</div>
       </div>`;
     });
@@ -7588,7 +7600,7 @@ function adminVerLoteCobranzaModal(id){
     html += '<div style="font-size:10.5px;font-weight:800;color:#5f6368;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px">Transferencias (para conciliar)</div>';
     r.transferencias.forEach(function(t){
       html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;padding:5px 0;border-bottom:1px solid #f1f3f4">
-        <div><b>${t.fecha||'—'}</b> · ${t.cliente_nombre||''}${t.referencia?(' · '+t.referencia):''}</div>
+        <div><b>${t.fecha||'—'}</b> · ${cobranzaEtiquetaCliente(t.cliente_id, t.cliente_nombre)}${t.referencia?(' · '+t.referencia):''}</div>
         <div style="font-weight:700">${money(t.monto)}</div>
       </div>`;
     });
@@ -7597,7 +7609,7 @@ function adminVerLoteCobranzaModal(id){
     html += '<div style="font-size:10.5px;font-weight:800;color:#5f6368;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px">📝 Comentarios del vendedor</div>';
     r.comentarios.forEach(function(c){
       html += `<div style="background:#fef7e0;border-radius:8px;padding:8px 10px;margin-bottom:6px">
-        <div style="font-size:10.5px;color:#7a5c00;font-weight:700">${c.numero_recibo||''} · ${c.cliente_nombre||''}</div>
+        <div style="font-size:10.5px;color:#7a5c00;font-weight:700">${c.numero_recibo||''} · ${cobranzaEtiquetaCliente(c.cliente_id, c.cliente_nombre)}</div>
         <div style="font-size:12px;color:#5f6368;margin-top:2px">${c.texto}</div>
       </div>`;
     });
